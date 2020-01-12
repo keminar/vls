@@ -1,13 +1,36 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <getopt.h>
 #include <limits.h>
+#include <sys/types.h>
 #include "../lib/progname.h"
 #include "../lib/system.h"
+
+enum filetype
+{
+    unknown,
+    fifo,
+    chardev,
+    directory,
+    blockdev,
+    normal,
+    symbolic_link,
+    sock,
+    whiteout,
+    arg_directory
+};
+
+#define true 1
+#define bool _Bool
+static int exit_status;
 
 static int decode_switches(int argc, char **argv);
 void usage(int status);
 static inline void emit_ancillary_info (void);
+static uintmax_t gobble_file(char const *name, enum filetype type,
+                            ino_t inode, bool command_line_arg,
+                            char const *dirname);
 
 enum {
     LS_MINOR_PROBLEM = 1,
@@ -50,10 +73,34 @@ static struct option const long_options[] =
 
 int main(int argc, char **argv)
 {
+    int i;
+    int n_files;
     set_program_name(argv[0]);
-    decode_switches(argc, argv);
-    /* code */
-    return 0;
+    i = decode_switches(argc, argv);
+    printf("%d\r\n", i);
+
+    //atexit(close_stdout);
+    exit_status = EXIT_SUCCESS;
+
+    n_files = argc - i;
+    if (n_files <= 0) {
+        // 没传入目录
+        gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "");
+    } else {
+        // 有传入目录
+        do {
+            gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "");
+        } while (i < argc);
+    }
+    
+    exit(exit_status);
+}
+
+static uintmax_t
+gobble_file(char const *name, enum filetype type, ino_t inode, 
+            bool command_line_arg, char const *dirname)
+{
+    printf("%s\n", name);
 }
 
 static int decode_switches(int argc, char **argv)
@@ -69,7 +116,7 @@ static int decode_switches(int argc, char **argv)
                             long_options, &oi);
 
         //每次执行会打印多次, 最后一次也是-1
-        //printf("c=%d\r\n", c);
+        //printf("c=%d, optind=%d\r\n", c, optind);
         if (c == -1) {
             break;
         }
@@ -79,28 +126,31 @@ static int decode_switches(int argc, char **argv)
             printf("c\r\n");
             break;
         case DEPTH_OPTION:
-        printf("d\r\n");
+            printf("d\r\n");
             break;
         case EXPIRE_DAY_OPTION:
             printf("e\r\n");
             break;
-            case 'h':
-        printf("h\r\n");
+        case 'h':
+            printf("h\r\n");
+            break;
+        case 'l':
+            printf("l\r\n");
             break;
         case 'n':
-        printf("n\r\n");
+            printf("n\r\n");
             break;
         case REMOVE_OPTION:
-        printf("r\r\n");
+            printf("r\r\n");
             break;
         case 's':
-        printf("s\r\n");
+            printf("s\r\n");
             break;
         case AUTHOR_OPTION:
-            printf("aaat\r\n");
+            printf("a\r\n");
             break;
         case GETOPT_VERSION_CHAR:
-            printf("bb\r\n");
+            printf("v\r\n");
             break;
         case GETOPT_HELP_CHAR:
             usage(EXIT_SUCCESS);
@@ -110,6 +160,8 @@ static int decode_switches(int argc, char **argv)
             break;
         }                            
     }
+    //optind：表示的是下一个将被处理到的参数在argv中的下标值
+    return optind;
 }
 
 void usage(int status)

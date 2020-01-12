@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include "progname.h"
 
+enum
+{
+    NOT_AN_INODE_NUMBER = 0
+};
 // 转换成字符串常量
 #define _(Msgid) ((const char*)Msgid)
 
@@ -11,5 +15,6 @@
 static inline void emit_ancillary_info (void)
 {
     printf(_("\nReport '%s' bugs to liminggui, qq:372884399\n"), program_name);
+    printf(_("home page: <https://github.com/keminar/vls>\n"));
     fputs(_("Licence GNU software\n"), stdout);
 }
