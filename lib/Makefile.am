@@ -1,0 +1,3 @@
+AUTOMAKE_OPTIONS=foreign
+noinst_LIBRARIES=libprogname.a
+libprogname_a_SOURCES=progname.h progname.c
