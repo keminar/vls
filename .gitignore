@@ -12,9 +12,11 @@
 .gdb-history
 .kludge-stamp
 .version
+/autom4te.cache
 /ChangeLog
 /INSTALL
 /autoscan.log
+/config.log
 /config.status
 /stamp-h1
 /src/vls
@@ -22,6 +24,5 @@
 /vls-*.tar.gz.sig
 ID
 Makefile
-Makefile.in
 TAGS
 THANKS
