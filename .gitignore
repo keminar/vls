@@ -12,6 +12,8 @@
 .gdb-history
 .kludge-stamp
 .version
+/ChangeLog
+/INSTALL
 /autoscan.log
 /compile
 /aclocal.m4
@@ -26,6 +28,10 @@
 /missing
 /stamp-h1
 /src/vls
+/vls-*.tar.gz
+/vls-*.tar.gz.sig
+ID
 Makefile
 Makefile.in
-
+TAGS
+THANKS
