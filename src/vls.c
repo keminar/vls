@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include "../lib/progname.h"
 #include "../lib/system.h"
+#include "config.h"
 
 enum filetype
 {
