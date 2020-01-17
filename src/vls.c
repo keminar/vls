@@ -4,9 +4,10 @@
 #include <getopt.h>
 #include <limits.h>
 #include <sys/types.h>
-#include "../lib/progname.h"
-#include "../lib/system.h"
-#include "config.h"
+#include <error.h>
+#include <errno.h>
+#include "lib/progname.h"
+#include "lib/system.h"
 
 enum filetype
 {
@@ -25,6 +26,10 @@ enum filetype
 #define true 1
 #define bool _Bool
 static int exit_status;
+
+static size_t depth_num;
+static size_t expire_day;
+static size_t list_max_num;
 
 static int decode_switches(int argc, char **argv);
 void usage(int status);
@@ -53,7 +58,7 @@ enum {
 #define GETOPT_VERSION_OPTION_DECL \
     "version", no_argument, NULL, GETOPT_VERSION_CHAR
 
-//原文链接：https://blog.csdn.net/qq_33850438/article/details/80172275
+//参考链接：https://blog.csdn.net/qq_33850438/article/details/80172275
 //no_argument(或者是0)时 ——参数后面不跟参数值，eg: --version,--help
 //required_argument(或者是1)时 ——参数输入格式为：--参数 值 或者 --参数=值。eg:--dir=/home
 //optional_argument(或者是2)时  ——参数输入格式只能为：--参数=值
@@ -83,6 +88,7 @@ int main(int argc, char **argv)
     //atexit(close_stdout);
     exit_status = EXIT_SUCCESS;
 
+    // 相减是传的文件数
     n_files = argc - i;
     if (n_files <= 0) {
         // 没传入目录
@@ -127,11 +133,35 @@ static int decode_switches(int argc, char **argv)
             printf("c\r\n");
             break;
         case DEPTH_OPTION:
-            printf("d\r\n");
+        {
+            //初始化，防被其它影响
+            errno = 0;
+            unsigned long int tmp_ulong;
+            //optarg 表示当前选项对应的参数值
+            tmp_ulong = strtoul(optarg, NULL, 0);
+            // >=SIZE_MAX 判断溢出，比如用printf打印为-1,使用depth_num < 0判断不了
+            if (errno != 0 || tmp_ulong >= SIZE_MAX) {
+                error (LS_FAILURE, 0, _("invalid --depth: %s"),
+                       optarg);
+            }
+            depth_num = tmp_ulong;
             break;
+        }
         case EXPIRE_DAY_OPTION:
-            printf("e\r\n");
+        {
+            //初始化，防被其它影响
+            errno = 0;
+            unsigned long int tmp_ulong;
+            //optarg 表示当前选项对应的参数值
+            tmp_ulong = strtoul(optarg, NULL, 0);
+            // >=SIZE_MAX 判断溢出
+            if (errno != 0 || tmp_ulong >= SIZE_MAX) {
+                error (LS_FAILURE, 0, _("invalid --expire-day: %s"),
+                       optarg);
+            }
+            expire_day = tmp_ulong;
             break;
+        }
         case 'h':
             printf("h\r\n");
             break;
@@ -139,8 +169,20 @@ static int decode_switches(int argc, char **argv)
             printf("l\r\n");
             break;
         case 'n':
-            printf("n\r\n");
+        {
+            //初始化，防被其它影响
+            errno = 0;
+            unsigned long int tmp_ulong;
+            //optarg 表示当前选项对应的参数值
+            tmp_ulong = strtoul(optarg, NULL, 0);
+            // >=SIZE_MAX 判断溢出
+            if (errno != 0 || tmp_ulong >= SIZE_MAX) {
+                error (LS_FAILURE, 0, _("invalid --num: %s"),
+                       optarg);
+            }
+            list_max_num = tmp_ulong;
             break;
+        }
         case REMOVE_OPTION:
             printf("r\r\n");
             break;

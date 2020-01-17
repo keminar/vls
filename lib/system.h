@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include "progname.h"
+#include "config.h"
 
 enum
 {
@@ -14,7 +15,7 @@ enum
 //在头文件定义函数又想避免冲突使用static inline
 static inline void emit_ancillary_info (void)
 {
-    printf(_("\nReport '%s' bugs to liminggui, qq:372884399\n"), program_name);
-    printf(_("home page: <https://github.com/keminar/vls>\n"));
+    printf(_("\nReport '%s' bugs to %s\n"), program_name, PACKAGE_BUGREPORT);
+    printf(_("home page: <https://github.com/keminar/vls>\n"), PACKAGE_NAME);
     fputs(_("Licence GNU software\n"), stdout);
 }
