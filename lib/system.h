@@ -1,7 +1,7 @@
 
 #include <stdio.h>
 #include "progname.h"
-#include "config.h"
+#include "../config.h"
 
 enum
 {

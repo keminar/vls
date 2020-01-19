@@ -6,8 +6,9 @@
 #include <sys/types.h>
 #include <error.h>
 #include <errno.h>
-#include "lib/progname.h"
-#include "lib/system.h"
+#include "../lib/progname.h"
+#include "../lib/system.h"
+#include <assert.h>
 
 enum filetype
 {
@@ -64,7 +65,7 @@ enum {
 //optional_argument(或者是2)时  ——参数输入格式只能为：--参数=值
 static struct option const long_options[] = 
 {
-    {"copy", required_argument, NULL, COPY_OPTION},
+    {"copy-to", required_argument, NULL, COPY_OPTION},
     {"depth", required_argument, NULL, DEPTH_OPTION},
     {"expire-day", required_argument, NULL, EXPIRE_DAY_OPTION},
     {"human-readable", no_argument, NULL, 'h'},
@@ -107,6 +108,8 @@ static uintmax_t
 gobble_file(char const *name, enum filetype type, ino_t inode, 
             bool command_line_arg, char const *dirname)
 {
+    // 如果command_line_arg 为false或者inode 为0则正常
+    assert (! command_line_arg || inode == NOT_AN_INODE_NUMBER);
     printf("%s\n", name);
 }
 
@@ -130,8 +133,13 @@ static int decode_switches(int argc, char **argv)
         switch (c)
         {
         case COPY_OPTION:
-            printf("c\r\n");
+        {
+            char *dst_file;
+            dst_file = (char *)optarg;
+            //dst_file = strdup(optarg)
+            printf("%s\r\n", dst_file);
             break;
+        }
         case DEPTH_OPTION:
         {
             //初始化，防被其它影响
@@ -221,7 +229,7 @@ Slow list information about the FILEs (the current directory by default).\n\
 Mandatory arguments to long options are mandatory for short options too.\n\
 "), stdout);
         fputs(_("\
-        --copy=TARGET           copy list files to TARGET directory\n\
+        --copy-to=TARGET        copy list files to TARGET directory\n\
         --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
     -h, --human-readable        with -l, print sizes in human readable format\n\
