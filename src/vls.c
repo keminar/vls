@@ -52,6 +52,9 @@ static bool print_author;
 
 static bool print_block_size;
 
+// True 则删除过期文件
+static bool remove_expire_file;
+
 enum format
 {
     long_format,		/* -l and other options that imply -l */
@@ -228,7 +231,7 @@ static int decode_switches(int argc, char **argv)
             break;
         }
         case REMOVE_OPTION:
-            printf("r\r\n");
+            remove_expire_file = true;
             break;
         case 's':
             print_block_size = true;
