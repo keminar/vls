@@ -8,6 +8,7 @@
 #include <errno.h>
 #include "../lib/progname.h"
 #include "../lib/system.h"
+#include "../lib/human.h"
 #include <assert.h>
 
 enum filetype
@@ -31,6 +32,36 @@ static int exit_status;
 static size_t depth_num;
 static size_t expire_day;
 static size_t list_max_num;
+
+/* Human-readable options for output.  */
+static int human_output_opts;
+
+/* The units to use when printing sizes other than file sizes.  */
+static uintmax_t output_block_size;
+
+/* Likewise, but for file sizes.  */
+static uintmax_t file_output_block_size = 1;
+
+static char *dst_file;
+
+/* True means to display author information.  */
+
+static bool print_author;
+
+/* True means mention the size in blocks of each file.  -s  */
+
+static bool print_block_size;
+
+enum format
+{
+    long_format,		/* -l and other options that imply -l */
+    one_per_line,		/* -1 */
+    many_per_line,		/* -C */
+    horizontal,			/* -x */
+    with_commas			/* -m */
+};
+
+static enum format format;
 
 static int decode_switches(int argc, char **argv);
 void usage(int status);
@@ -100,6 +131,10 @@ int main(int argc, char **argv)
             gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "");
         } while (i < argc);
     }
+
+    if (dst_file != NULL) {
+        printf("dst=%s\r\n", dst_file);
+    }
     
     exit(exit_status);
 }
@@ -115,6 +150,8 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
 
 static int decode_switches(int argc, char **argv)
 {
+    format = many_per_line;
+
     for (;;) {
         int oi = -1;
         //形式如 a:b::cd: ，分别表示程序支持的命令行短选项有-a、-b、-c、-d，冒号含义如下：
@@ -134,10 +171,8 @@ static int decode_switches(int argc, char **argv)
         {
         case COPY_OPTION:
         {
-            char *dst_file;
             dst_file = (char *)optarg;
             //dst_file = strdup(optarg)
-            printf("%s\r\n", dst_file);
             break;
         }
         case DEPTH_OPTION:
@@ -171,10 +206,11 @@ static int decode_switches(int argc, char **argv)
             break;
         }
         case 'h':
-            printf("h\r\n");
+            human_output_opts = human_autoscale | human_SI | human_base_1024;
+            file_output_block_size = output_block_size = 1;
             break;
         case 'l':
-            printf("l\r\n");
+            format = long_format;
             break;
         case 'n':
         {
@@ -195,13 +231,13 @@ static int decode_switches(int argc, char **argv)
             printf("r\r\n");
             break;
         case 's':
-            printf("s\r\n");
+            print_block_size = true;
             break;
         case AUTHOR_OPTION:
-            printf("a\r\n");
+            print_author = true;
             break;
         case GETOPT_VERSION_CHAR:
-            printf("v\r\n");
+            printf("ver=0.1\r\n");
             break;
         case GETOPT_HELP_CHAR:
             usage(EXIT_SUCCESS);

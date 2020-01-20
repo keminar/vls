@@ -103,6 +103,10 @@ AM_V_AR = $(am__v_AR_@AM_V@)
 am__v_AR_ = $(am__v_AR_@AM_DEFAULT_V@)
 am__v_AR_0 = @echo "  AR      " $@;
 am__v_AR_1 = 
+libhuman_a_AR = $(AR) $(ARFLAGS)
+libhuman_a_LIBADD =
+am_libhuman_a_OBJECTS = human.$(OBJEXT)
+libhuman_a_OBJECTS = $(am_libhuman_a_OBJECTS)
 libprogname_a_AR = $(AR) $(ARFLAGS)
 libprogname_a_LIBADD =
 am_libprogname_a_OBJECTS = progname.$(OBJEXT)
@@ -122,7 +126,7 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/progname.Po
+am__depfiles_remade = ./$(DEPDIR)/human.Po ./$(DEPDIR)/progname.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -136,8 +140,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libprogname_a_SOURCES)
-DIST_SOURCES = $(libprogname_a_SOURCES)
+SOURCES = $(libhuman_a_SOURCES) $(libprogname_a_SOURCES)
+DIST_SOURCES = $(libhuman_a_SOURCES) $(libprogname_a_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -253,8 +257,9 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
-noinst_LIBRARIES = libprogname.a
+noinst_LIBRARIES = libprogname.a libhuman.a
 libprogname_a_SOURCES = progname.h progname.c
+libhuman_a_SOURCES = human.h human.c
 all: all-am
 
 .SUFFIXES:
@@ -292,6 +297,11 @@ $(am__aclocal_m4_deps):
 clean-noinstLIBRARIES:
 	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
 
+libhuman.a: $(libhuman_a_OBJECTS) $(libhuman_a_DEPENDENCIES) $(EXTRA_libhuman_a_DEPENDENCIES) 
+	$(AM_V_at)-rm -f libhuman.a
+	$(AM_V_AR)$(libhuman_a_AR) libhuman.a $(libhuman_a_OBJECTS) $(libhuman_a_LIBADD)
+	$(AM_V_at)$(RANLIB) libhuman.a
+
 libprogname.a: $(libprogname_a_OBJECTS) $(libprogname_a_DEPENDENCIES) $(EXTRA_libprogname_a_DEPENDENCIES) 
 	$(AM_V_at)-rm -f libprogname.a
 	$(AM_V_AR)$(libprogname_a_AR) libprogname.a $(libprogname_a_OBJECTS) $(libprogname_a_LIBADD)
@@ -303,6 +313,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/human.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/progname.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -449,7 +460,8 @@ clean: clean-am
 clean-am: clean-generic clean-noinstLIBRARIES mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ./$(DEPDIR)/progname.Po
+		-rm -f ./$(DEPDIR)/human.Po
+	-rm -f ./$(DEPDIR)/progname.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -495,7 +507,8 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ./$(DEPDIR)/progname.Po
+		-rm -f ./$(DEPDIR)/human.Po
+	-rm -f ./$(DEPDIR)/progname.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
