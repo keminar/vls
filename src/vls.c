@@ -42,7 +42,8 @@ static uintmax_t output_block_size;
 /* Likewise, but for file sizes.  */
 static uintmax_t file_output_block_size = 1;
 
-static char *dst_file;
+// 把文件copy到此目录
+static char *copy_to_dir;
 
 /* True means to display author information.  */
 
@@ -135,8 +136,8 @@ int main(int argc, char **argv)
         } while (i < argc);
     }
 
-    if (dst_file != NULL) {
-        printf("dst=%s\r\n", dst_file);
+    if (copy_to_dir != NULL) {
+        printf("dst=%s\r\n", copy_to_dir);
     }
     
     exit(exit_status);
@@ -174,8 +175,8 @@ static int decode_switches(int argc, char **argv)
         {
         case COPY_OPTION:
         {
-            dst_file = (char *)optarg;
-            //dst_file = strdup(optarg)
+            copy_to_dir = (char *)optarg;
+            //copy_to_dir = strdup(optarg)
             break;
         }
         case DEPTH_OPTION:
