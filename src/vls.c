@@ -3,13 +3,16 @@
 #include <stdint.h>
 #include <getopt.h>
 #include <limits.h>
+#include <string.h>
+#include <dirent.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <error.h>
 #include <errno.h>
+#include <assert.h>
 #include "../lib/progname.h"
 #include "../lib/system.h"
 #include "../lib/human.h"
-#include <assert.h>
 
 enum filetype
 {
@@ -32,6 +35,7 @@ static int exit_status;
 static size_t depth_num;
 static size_t expire_day;
 static size_t list_max_num;
+static uintmax_t total_blocks;
 
 /* Human-readable options for output.  */
 static int human_output_opts;
@@ -73,6 +77,8 @@ static inline void emit_ancillary_info (void);
 static uintmax_t gobble_file(char const *name, enum filetype type,
                             ino_t inode, bool command_line_arg,
                             char const *dirname);
+static void attach(char *dest, const char *dirname, const char *name);                            
+static void print_dir_files(const char *absolute_name);
 
 enum {
     LS_MINOR_PROBLEM = 1,
@@ -119,7 +125,7 @@ int main(int argc, char **argv)
     int n_files;
     set_program_name(argv[0]);
     i = decode_switches(argc, argv);
-    printf("%d\r\n", i);
+    //printf("i=%d\r\n", i);
 
     //atexit(close_stdout);
     exit_status = EXIT_SUCCESS;
@@ -128,11 +134,11 @@ int main(int argc, char **argv)
     n_files = argc - i;
     if (n_files <= 0) {
         // 没传入目录
-        gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "");
+        total_blocks += gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "");
     } else {
         // 有传入目录
         do {
-            gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "");
+            total_blocks += gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "");
         } while (i < argc);
     }
 
@@ -147,9 +153,120 @@ static uintmax_t
 gobble_file(char const *name, enum filetype type, ino_t inode, 
             bool command_line_arg, char const *dirname)
 {
+    uintmax_t blocks = 0;
     // 如果command_line_arg 为false或者inode 为0则正常
     assert (! command_line_arg || inode == NOT_AN_INODE_NUMBER);
-    printf("%s\n", name);
+    //printf("name=%s\n", name);
+    
+    char *absolute_name;
+    int err;
+    // 全路径或是顶级路径
+    if (name[0] == '/' || dirname[0] == 0)
+        absolute_name = (char *) name;
+    else
+    {
+        //alloca是在栈(stack)上申请空间,该变量离开其作用域之后被自动释放，无需手动调用释放函数。
+        //strlen长度不包括尾部的\0所以要+2
+        absolute_name = alloca(strlen(name) + strlen(dirname) + 2);
+        attach(absolute_name, dirname, name);
+    }
+    
+    struct stat st;
+    err = stat(absolute_name, &st);
+    if (err != 0) {
+        error(LS_FAILURE, err, _("cannot access %s"), absolute_name);
+        return 0;
+    }
+
+    //@todo 根据st.st_dev, st.st_ino检查文件是否被访问过，防止软链导致死循环
+
+    blocks = ST_NBLOCKS(st);
+    if (S_ISDIR(st.st_mode)) {
+        print_dir_files(absolute_name);
+    } else {
+        printf("file: %s \n", absolute_name);                    
+    }
+    return blocks;
+}
+
+static void
+print_dir_files(const char *name)
+{
+    DIR *dirp;
+    struct dirent *next;
+    static bool first = true;
+    int now;
+    int index = 0;
+    //printf("%s\n", name);
+
+    errno = 0;
+    dirp = opendir(name);
+    if (!dirp) {
+        error(LS_FAILURE, errno, _("cannot open directory"), name);
+        return;
+    }
+    now = time(NULL);
+    while (1)
+    {
+        // 重置错误码
+        errno = 0;
+        next = readdir(dirp);
+        if (next) {
+            if (strcmp(next->d_name,  "..") != 0 && strcmp(next->d_name,  ".") != 0) {
+                
+                int err;
+                struct stat st;
+                char *absolute_name;
+                absolute_name = alloca(strlen(next->d_name) + strlen(name) + 2);
+                attach(absolute_name, name, next->d_name);
+
+                err = stat(absolute_name, &st);
+                if (err != 0) {
+                    error(LS_FAILURE, err, _("cannot access %s"), absolute_name);
+                    break;
+                }
+                if (S_ISDIR(st.st_mode)) {
+                    gobble_file(next->d_name, directory, NOT_AN_INODE_NUMBER, true, name);
+                } else {
+                    printf("file: %s \n", absolute_name);                    
+                }
+            }
+            usleep(400);
+        } else if (errno != 0) {
+            error(LS_FAILURE, errno, _("reading directory %s"), name);
+            break;
+        } else {
+            break;
+        }
+    }
+    closedir(dirp);
+}
+
+
+// 合并目录和文件名
+static void attach(char *dest, const char *dirname, const char *name)
+{
+    // copy一个指针为了下面++时保留指针原始位置
+    const char *dirnamep = dirname;
+
+    //目录不是 "." ,因为单.是默认值，如加在文件前面且没有/会改变文件路径
+    if (dirname[0] != '.' || dirname[1] != 0) {
+        while (*dirnamep) {
+            //*号和++属于同一优先级，且方向都是从右向左的，*p++和*(p++)作用相同
+            *dest++ = *dirnamep++;
+        }
+
+        // 如果目录长度不为空，且最后不为不为"/" 则追加"/"
+        if (dirnamep > dirname && dirnamep[-1] != '/')
+            *dest++ = '/';
+        
+    }
+    while (*name)
+    {
+        *dest++ = *name++;
+    }
+    // 结束符
+    *dest = 0;
 }
 
 static int decode_switches(int argc, char **argv)
