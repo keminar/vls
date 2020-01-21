@@ -14,6 +14,8 @@
 #include "../lib/progname.h"
 #include "../lib/system.h"
 #include "../lib/human.h"
+#include "../lib/filemode.h"
+#include "../lib/idcache.h"
 
 enum filetype
 {
@@ -39,8 +41,8 @@ static size_t expire_day;
 static size_t list_max_num;
 //休息时间
 static size_t sleep_time;
-//总blocks
-static uintmax_t total_blocks;
+//总大小
+static uintmax_t total_size;
 //脚本执行时间
 static int now_time;
 
@@ -60,20 +62,23 @@ static char *copy_to_dir;
 
 static bool print_author;
 
-/* True means mention the size in blocks of each file.  -s  */
-
-static bool print_block_size;
+//打印总大小
+static bool print_size;
 
 // True 则删除过期文件
 static bool remove_expire_file;
+
+/* The number of chars per hardware tab stop.  Setting this to zero
+   inhibits the use of TAB characters for separating columns.  -T */
+static size_t tabsize;
+
+//打印的文件数
+static size_t print_nums;
 
 enum format
 {
     long_format,		/* -l and other options that imply -l */
     one_per_line,		/* -1 */
-    many_per_line,		/* -C */
-    horizontal,			/* -x */
-    with_commas			/* -m */
 };
 
 static enum format format;
@@ -81,11 +86,24 @@ static enum format format;
 static int decode_switches(int argc, char **argv);
 void usage(int status);
 static inline void emit_ancillary_info (void);
-static uintmax_t gobble_file(char const *name, enum filetype type,
+static void gobble_file(char const *name, enum filetype type,
                             ino_t inode, bool command_line_arg,
                             char const *dirname, int depth);
 static void attach(char *dest, const char *dirname, const char *name);                            
-static void print_dir_files(const char *absolute_name, int depth);
+static void print_dir(const char *absolute_name, int depth);
+static void print_current_file (const char *absolute_name, struct stat st);
+
+static void print_long_format(const char *name, struct stat st);
+static void print_one_per_line(const char *absolute_name);
+
+char *
+human_readable (off_t n, char *buf);
+static void
+format_user (uid_t u, int width, bool stat_ok);
+static void
+format_group (gid_t g, int width, bool stat_ok);
+static void
+format_user_or_group (char const *name, unsigned long int id, int width);
 
 enum {
     LS_MINOR_PROBLEM = 1,
@@ -95,9 +113,9 @@ enum {
     GETOPT_HELP_CHAR = CHAR_MAX - 2,
     GETOPT_VERSION_CHAR = CHAR_MAX - 3,
     AUTHOR_OPTION = CHAR_MAX + 1,
-    EXPIRE_DAY_OPTION,
     COPY_OPTION,
     DEPTH_OPTION,
+    EXPIRE_DAY_OPTION,
     REMOVE_OPTION,
     SLEEP_OPTION
 };
@@ -133,6 +151,7 @@ int main(int argc, char **argv)
     int i;
     int n_files;
 
+    print_nums = 0;
     now_time = time(NULL);
 
     set_program_name(argv[0]);
@@ -146,28 +165,27 @@ int main(int argc, char **argv)
     n_files = argc - i;
     if (n_files <= 0) {
         // 没传入目录
-        total_blocks += gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "", 0);
+        gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "", 0);
     } else {
         // 有传入目录
         do {
-            total_blocks += gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "", 0);
+            gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "", 0);
         } while (i < argc);
     }
 
     if (copy_to_dir != NULL) {
         printf("dst=%s\r\n", copy_to_dir);
     }
-    if (print_block_size) {
-        printf("total %d\n", total_blocks);
+    if (print_size) {
+        printf("total %d\n", total_size);
     }
     exit(exit_status);
 }
 
-static uintmax_t
+static void
 gobble_file(char const *name, enum filetype type, ino_t inode, 
             bool command_line_arg, char const *dirname, int depth)
 {
-    uintmax_t blocks = 0;
     // 如果command_line_arg 为false或者inode 为0则正常
     assert (! command_line_arg || inode == NOT_AN_INODE_NUMBER);
     //printf("name=%s\n", name);
@@ -190,18 +208,17 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
     if (command_line_arg) {
         err = stat(absolute_name, &st);
     } else {
-        //printf("list_num=%d\n", list_max_num);
-        // 显示条数，必须为==0,再减就是正数最大值了，可以用SIZE_MAX检查溢出
-        if (list_max_num == 0 || list_max_num >= SIZE_MAX) {
-            return 0;
+        //printf("list_num=%d\n", print_nums);
+        if (print_nums >= list_max_num) {
+            return;
         }
-        // 要放在判断0之后，不然下次循环再减就是正数最大了
-        list_max_num--;
+        // 要放在判断之后，不然下次循环再加了
+        print_nums++;
         err = lstat(absolute_name, &st);
     }
     if (err != 0) {
         error(LS_FAILURE, err, _("cannot access %s\n"), absolute_name);
-        return 0;
+        return;
     }
 
     //@todo 根据st.st_dev, st.st_ino检查文件是否被访问过，防止软链导致死循环
@@ -218,29 +235,32 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
        原文链接：https://blog.csdn.net/yuan_hong_wei/article/details/50326569
         */
     if (S_ISLNK (st.st_mode)) {
-        printf("link: %s \n", absolute_name);
+        //printf("link: %s \n", absolute_name);
+        print_current_file(absolute_name, st);
     } else if (S_ISDIR(st.st_mode)) {
         //printf("depth=%d\n", depth);
-        printf("dir: %s \n", absolute_name);
+        //printf("dir: %s \n", absolute_name);
+        if (!command_line_arg || depth_max_num == 0) {
+            print_current_file(absolute_name, st);
+        }
         if (depth >= depth_max_num) {
-            return 0;
+            return;
         }
         //如果要往下访问，提前+1
         depth++;
-        print_dir_files(absolute_name, depth);
+        print_dir(absolute_name, depth);
     } else {
-        printf("file: %s \n", absolute_name);                    
+        //printf("file: %s \n", absolute_name);
+        print_current_file(absolute_name, st);
     }
     // 让电脑休息一下
     if (sleep_time > 0) {
         usleep(sleep_time);
     }
-    blocks = ST_NBLOCKS(st);
-    return blocks;
 }
 
 static void
-print_dir_files(const char *dirname, int depth)
+print_dir(const char *dirname, int depth)
 {
     DIR *dirp;
     struct dirent *next;
@@ -273,7 +293,7 @@ print_dir_files(const char *dirname, int depth)
                     case DT_REG:  type = normal;		break;
                     case DT_SOCK: type = sock;		break;
                 }
-                total_blocks += gobble_file(next->d_name, type, next->d_ino, false, dirname, depth);
+                gobble_file(next->d_name, type, next->d_ino, false, dirname, depth);
             }
         } else if (errno != 0) {
             error(LS_FAILURE, errno, _("reading directory %s\n"), dirname);
@@ -286,6 +306,123 @@ print_dir_files(const char *dirname, int depth)
         // @todo 目录为空，检查是否要删除目录
     }
     closedir(dirp);
+}
+
+// 因为有存在打印多个目录的文件，所以统计用完整目录打印，不然要处理很多格式问题
+static void print_current_file (const char *absolute_name, struct stat st)
+{
+    total_size += st.st_size;
+    switch (format)
+    {
+        case one_per_line:
+            print_one_per_line (absolute_name);
+            break;
+        case long_format:
+            print_long_format(absolute_name, st);
+            break;
+    }
+}
+
+// 打印多些数据
+static void print_long_format(const char *absolute_name, struct stat st)
+{
+    char modebuf[12];
+    struct tm *when_local;
+    char timeStr[80];
+    char *p;
+    char buf[1024];
+
+    p = buf;
+
+    filemodestring (&st, modebuf);
+    sprintf (p, "%s ", modebuf);
+    p += strlen (p);
+
+    char hbuf[LONGEST_HUMAN_READABLE + 1];
+    char const *size = human_readable (st.st_size, hbuf);
+    int pad;
+    for (pad = 5 - strlen(size); 0 < pad; pad--)
+        *p++ = ' ';
+    while ((*p++ = *size++))
+        continue;
+    *p = '\0';
+    fputs (buf, stdout);
+    putchar (' ');
+
+    format_user (st.st_uid, 10, true);
+    format_group (st.st_gid, 10, true);
+    p = buf;
+
+    when_local = localtime (&st.st_mtime);
+
+    strftime(timeStr,sizeof(timeStr),"%F %T",when_local);
+    fputs(timeStr, stdout);
+    putchar (' ');
+    fputs(absolute_name, stdout);
+    putchar ('\n');
+}
+
+char *
+human_readable (off_t n, char *buf)
+{
+    // 为了编译能过，第一个if写成这样
+    if (n / 1024 > 1024 * 1024 * 1024) {
+        sprintf (buf, "%d.%dT", n / 1024 / 1024 / 1024 / 1024, ((n /1024 ) % (1024 * 1024 * 1024) != 0));
+    } else if (n > 1024 * 1024 * 1024 ) {
+        sprintf (buf, "%d.%dG", n / 1024 / 1024 / 1024, (n % (1024 * 1024 * 1024) != 0));
+    } else if (n > 1024 * 1024 ) {
+        sprintf (buf, "%dM", n / 1024 / 1024);
+    } else if (n > 1024 ) {
+        sprintf (buf, "%dK", n / 1024);
+    } else {
+        sprintf (buf, "%d", n);
+    }
+    return buf;
+}
+
+static void
+format_user_or_group (char const *name, unsigned long int id, int width)
+{
+    if (name)
+    {
+        int width_gap = width - strlen (name);
+        int pad = MAX (0, width_gap);
+        fputs (name, stdout);
+
+        do
+            putchar (' ');
+        while (pad--);
+    }
+    else
+    {
+        printf ("%*lu ", width, id);
+    }
+}
+
+/* Print the name or id of the user with id U, using a print width of
+   WIDTH.  */
+
+static void
+format_user (uid_t u, int width, bool stat_ok)
+{
+    format_user_or_group (! stat_ok ? "?" :
+                          getuser (u), u, width);
+}
+
+/* Likewise, for groups.  */
+
+static void
+format_group (gid_t g, int width, bool stat_ok)
+{
+    format_user_or_group (! stat_ok ? "?" :
+                          getgroup (g), g, width);
+}
+
+
+// 只打印文件名
+static void print_one_per_line(const char *absolute_name)
+{
+    printf("%s\n", absolute_name);
 }
 
 // 合并目录和文件名
@@ -317,10 +454,27 @@ static void attach(char *dest, const char *dirname, const char *name)
 // 解析参数
 static int decode_switches(int argc, char **argv)
 {
-    format = many_per_line;
+    format = one_per_line;
+    depth_max_num = 1;
     sleep_time = 400;
     list_max_num = 10000;
-    print_block_size = false;
+    print_size = false;
+
+    {
+        char const *p = getenv ("TABSIZE");
+        tabsize = 8;
+        if (p)
+        {
+            unsigned long int tmp_ulong;
+            tmp_ulong = strtoul(p, NULL, 0);
+            if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                error (LS_FAILURE, 0, _("ignoring invalid tab size in environment variable TABSIZE: %s"),
+                       p);
+            } else {
+                tabsize = tmp_ulong;
+            }
+        }
+    }
 
     for (;;) {
         int oi = -1;
@@ -329,7 +483,7 @@ static int decode_switches(int argc, char **argv)
         //(2)一个字符，后接一个冒号——表示选项后面带一个参数，如-a 100
         //(3)一个字符，后接两个冒号——表示选项后面带一个可选参数，选项与参数之间不能有空格, 形式应该如-b200
         int c = getopt_long(argc, argv, 
-                            "hln:s",
+                            "chln:s",
                             long_options, &oi);
 
         //每次执行会打印多次, 最后一次也是-1
@@ -339,100 +493,102 @@ static int decode_switches(int argc, char **argv)
         }
         switch (c)
         {
-        case COPY_OPTION:
-        {
-            copy_to_dir = (char *)optarg;
-            //copy_to_dir = strdup(optarg)
-            break;
-        }
-        case DEPTH_OPTION:
-        {
-            //初始化，防被其它影响
-            errno = 0;
-            unsigned long int tmp_ulong;
-            //optarg 表示当前选项对应的参数值
-            tmp_ulong = strtoul(optarg, NULL, 0);
+            case COPY_OPTION:
+            {
+                copy_to_dir = (char *)optarg;
+                //copy_to_dir = strdup(optarg)
+                break;
+            }
+            case DEPTH_OPTION:
+            {
+                //初始化，防被其它影响
+                errno = 0;
+                unsigned long int tmp_ulong;
+                //optarg 表示当前选项对应的参数值
+                tmp_ulong = strtoul(optarg, NULL, 0);
 
-            // 转成有符号的判断溢出，否则识别不了负数
-            if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
-                error (LS_FAILURE, 0, _("invalid --depth: %s"),
-                       optarg);
+                // 转成有符号的判断溢出，否则识别不了负数
+                if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                    error (LS_FAILURE, 0, _("invalid --depth: %s"),
+                           optarg);
+                }
+                //printf("%ul,%ul\n", tmp_ulong, SIZE_MAX);
+                depth_max_num = tmp_ulong;
+                break;
             }
-            printf("%ul,%ul\n", tmp_ulong, SIZE_MAX);
-            depth_max_num = tmp_ulong;
-            break;
-        }
-        case EXPIRE_DAY_OPTION:
-        {
-            //初始化，防被其它影响
-            errno = 0;
-            unsigned long int tmp_ulong;
-            //optarg 表示当前选项对应的参数值
-            tmp_ulong = strtoul(optarg, NULL, 0);
-            // 转成有符号的判断溢出，否则识别不了负数
-            if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
-                error (LS_FAILURE, 0, _("invalid --expire-day: %s"),
-                       optarg);
+            case EXPIRE_DAY_OPTION:
+            {
+                //初始化，防被其它影响
+                errno = 0;
+                unsigned long int tmp_ulong;
+                //optarg 表示当前选项对应的参数值
+                tmp_ulong = strtoul(optarg, NULL, 0);
+                // 转成有符号的判断溢出，否则识别不了负数
+                if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                    error (LS_FAILURE, 0, _("invalid --expire-day: %s"),
+                           optarg);
+                }
+                expire_day = tmp_ulong;
+                break;
             }
-            expire_day = tmp_ulong;
-            break;
-        }
-        case 'h':
-            human_output_opts = human_autoscale | human_SI | human_base_1024;
-            file_output_block_size = output_block_size = 1;
-            break;
-        case 'l':
-            format = long_format;
-            break;
-        case 'n':
-        {
-            //初始化，防被其它影响
-            errno = 0;
-            unsigned long int tmp_ulong;
-            //optarg 表示当前选项对应的参数值
-            tmp_ulong = strtoul(optarg, NULL, 0);
-            // 转成有符号的判断溢出，否则识别不了负数
-            if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
-                error (LS_FAILURE, 0, _("invalid --num: %s"),
-                       optarg);
+            case 'h':
+                human_output_opts = human_autoscale | human_SI | human_base_1024;
+                file_output_block_size = output_block_size = 1;
+                break;
+            case 'l':
+                format = long_format;
+                break;
+            case 'n':
+            {
+                //初始化，防被其它影响
+                errno = 0;
+                unsigned long int tmp_ulong;
+                //optarg 表示当前选项对应的参数值
+                tmp_ulong = strtoul(optarg, NULL, 0);
+                // 转成有符号的判断溢出，否则识别不了负数
+                if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                    error (LS_FAILURE, 0, _("invalid --num: %s"),
+                           optarg);
+                }
+                list_max_num = tmp_ulong;
+                break;
             }
-            list_max_num = tmp_ulong;
-            break;
-        }
-        case REMOVE_OPTION:
-            remove_expire_file = true;
-            break;
-        case 's':
-            print_block_size = true;
-            break;
-        case SLEEP_OPTION:
-        {
-            //初始化，防被其它影响
-            errno = 0;
-            unsigned long int tmp_ulong;
-            //optarg 表示当前选项对应的参数值
-            tmp_ulong = strtoul(optarg, NULL, 0);
-            // 转成有符号的判断溢出，否则识别不了负数
-            if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
-                error (LS_FAILURE, 0, _("invalid --sleep: %s"),
-                       optarg);
+            case REMOVE_OPTION:
+                remove_expire_file = true;
+                //如果要删除,单行输出
+                format = one_per_line;
+                break;
+            case 's':
+                print_size = true;
+                break;
+            case SLEEP_OPTION:
+            {
+                //初始化，防被其它影响
+                errno = 0;
+                unsigned long int tmp_ulong;
+                //optarg 表示当前选项对应的参数值
+                tmp_ulong = strtoul(optarg, NULL, 0);
+                // 转成有符号的判断溢出，否则识别不了负数
+                if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                    error (LS_FAILURE, 0, _("invalid --sleep: %s"),
+                           optarg);
+                }
+                sleep_time = tmp_ulong;
+                break;
             }
-            sleep_time = tmp_ulong;
-            break;
+            case AUTHOR_OPTION:
+                print_author = true;
+                break;
+            case GETOPT_VERSION_CHAR:
+                printf("ver=0.1\r\n");
+                break;
+            case GETOPT_HELP_CHAR:
+                usage(EXIT_SUCCESS);
+                break;
+            default:
+                usage(LS_FAILURE);
+                break;
         }
-        case AUTHOR_OPTION:
-            print_author = true;
-            break;
-        case GETOPT_VERSION_CHAR:
-            printf("ver=0.1\r\n");
-            break;
-        case GETOPT_HELP_CHAR:
-            usage(EXIT_SUCCESS);
-            break;
-        default:
-            usage(LS_FAILURE);
-            break;
-        }                            
     }
     //optind：表示的是下一个将被处理到的参数在argv中的下标值
     return optind;
@@ -461,7 +617,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
     -n, --num=NUM               max list file nums, default 10000\n\
         --remove                delete files one by one of all lists\n\
                                 must be used with --expire-day together\n\
-    -s, --size                  print the allocated size of each file, in blocks\n\
+    -s, --size                  print the total size of all files\n\
         --sleep=NUM             sleep time (ms) when show every one file, default 400\n\
 "), stdout);
         fputs(_("\
