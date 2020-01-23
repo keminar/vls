@@ -37,6 +37,7 @@ static int exit_status;
 static size_t depth_max_num;
 //过期时间
 static size_t expire_day;
+static bool expire_opt_set;
 //最大访问数
 static size_t list_max_num;
 //休息时间
@@ -46,17 +47,9 @@ static uintmax_t total_size;
 //脚本执行时间
 static int now_time;
 
-/* Human-readable options for output.  */
-static int human_output_opts;
-
-/* The units to use when printing sizes other than file sizes.  */
-static uintmax_t output_block_size;
-
-/* Likewise, but for file sizes.  */
-static uintmax_t file_output_block_size = 1;
-
 // 把文件copy到此目录
 static char *copy_to_dir;
+static bool copy_to_opt;
 
 /* True means to display author information.  */
 
@@ -93,8 +86,9 @@ static void attach(char *dest, const char *dirname, const char *name);
 static void print_dir(const char *absolute_name, int depth);
 static void print_current_file (const char *absolute_name, struct stat st);
 
-static void print_long_format(const char *name, struct stat st);
-static void print_one_per_line(const char *absolute_name);
+static void print_long_format(const char *absolute_name, struct stat st);
+static void print_one_per_line(const char *absolute_name, struct stat st);
+static void judge_dir_file(const char *absolute_name, struct stat st);
 
 char *
 human_readable (off_t n, char *buf);
@@ -135,7 +129,6 @@ static struct option const long_options[] =
     {"copy-to", required_argument, NULL, COPY_OPTION},
     {"depth", required_argument, NULL, DEPTH_OPTION},
     {"expire-day", required_argument, NULL, EXPIRE_DAY_OPTION},
-    {"human-readable", no_argument, NULL, 'h'},
     {"num", required_argument, NULL, 'n'},
     {"remove", no_argument, NULL, REMOVE_OPTION},
     {"size", no_argument, NULL, 's'},
@@ -151,6 +144,8 @@ int main(int argc, char **argv)
     int i;
     int n_files;
 
+    copy_to_opt = false;
+    expire_opt_set = false;
     print_nums = 0;
     now_time = time(NULL);
 
@@ -240,15 +235,20 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
     } else if (S_ISDIR(st.st_mode)) {
         //printf("depth=%d\n", depth);
         //printf("dir: %s \n", absolute_name);
-        if (!command_line_arg || depth_max_num == 0) {
-            print_current_file(absolute_name, st);
-        }
+        
         if (depth >= depth_max_num) {
+            if (!command_line_arg || depth_max_num == 0) {
+                print_current_file(absolute_name, st);
+            }
             return;
+        } else {
+            //如果要往下访问，提前+1
+            depth++;
+            print_dir(absolute_name, depth);
+            if (!command_line_arg || depth_max_num == 0) {
+                print_current_file(absolute_name, st);
+            }
         }
-        //如果要往下访问，提前+1
-        depth++;
-        print_dir(absolute_name, depth);
     } else {
         //printf("file: %s \n", absolute_name);
         print_current_file(absolute_name, st);
@@ -315,7 +315,7 @@ static void print_current_file (const char *absolute_name, struct stat st)
     switch (format)
     {
         case one_per_line:
-            print_one_per_line (absolute_name);
+            print_one_per_line (absolute_name, st);
             break;
         case long_format:
             print_long_format(absolute_name, st);
@@ -352,6 +352,9 @@ static void print_long_format(const char *absolute_name, struct stat st)
     format_user (st.st_uid, 10, true);
     format_group (st.st_gid, 10, true);
     p = buf;
+
+    putchar (' ');
+    judge_dir_file(absolute_name, st);
 
     when_local = localtime (&st.st_mtime);
 
@@ -420,9 +423,36 @@ format_group (gid_t g, int width, bool stat_ok)
 
 
 // 只打印文件名
-static void print_one_per_line(const char *absolute_name)
+static void print_one_per_line(const char *absolute_name, struct stat st)
 {
+    judge_dir_file(absolute_name, st);
     printf("%s\n", absolute_name);
+}
+
+// 删除目录和文件
+static void judge_dir_file(const char *absolute_name, struct stat st)
+{
+    if (copy_to_opt) {
+        printf("\nwait...\n");
+        exit(1);
+    }
+    if (!expire_opt_set) {
+        return;
+    }
+    if (now_time - st.st_mtime > 86400 * expire_day) {
+        if (remove_expire_file) {
+            fputs ("rem ", stdout);
+            if (S_ISDIR(st.st_mode)) {
+                rmdir(absolute_name);
+            } else if (S_ISLNK(st.st_mode) || S_ISREG(st.st_mode)) {
+                remove(absolute_name);
+            }
+        } else {
+            fputs ("exp ", stdout);
+        }
+    } else {
+        fputs("sta ", stdout);
+    }   
 }
 
 // 合并目录和文件名
@@ -457,7 +487,7 @@ static int decode_switches(int argc, char **argv)
     format = one_per_line;
     depth_max_num = 1;
     sleep_time = 400;
-    list_max_num = 10000;
+    list_max_num = 1000;
     print_size = false;
 
     {
@@ -483,7 +513,7 @@ static int decode_switches(int argc, char **argv)
         //(2)一个字符，后接一个冒号——表示选项后面带一个参数，如-a 100
         //(3)一个字符，后接两个冒号——表示选项后面带一个可选参数，选项与参数之间不能有空格, 形式应该如-b200
         int c = getopt_long(argc, argv, 
-                            "chln:s",
+                            "cln:s",
                             long_options, &oi);
 
         //每次执行会打印多次, 最后一次也是-1
@@ -497,6 +527,7 @@ static int decode_switches(int argc, char **argv)
             {
                 copy_to_dir = (char *)optarg;
                 //copy_to_dir = strdup(optarg)
+                copy_to_opt = true;
                 break;
             }
             case DEPTH_OPTION:
@@ -529,12 +560,9 @@ static int decode_switches(int argc, char **argv)
                            optarg);
                 }
                 expire_day = tmp_ulong;
+                expire_opt_set = true;
                 break;
             }
-            case 'h':
-                human_output_opts = human_autoscale | human_SI | human_base_1024;
-                file_output_block_size = output_block_size = 1;
-                break;
             case 'l':
                 format = long_format;
                 break;
@@ -611,8 +639,6 @@ Mandatory arguments to long options are mandatory for short options too.\n\
         --copy-to=TARGET        copy list files to TARGET directory\n\
         --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
-    -h, --human-readable        with -l, print sizes in human readable format\n\
-                                (e.g., 1K 234M 2G)\n\
     -l                          use a long listing format\n\
     -n, --num=NUM               max list file nums, default 10000\n\
         --remove                delete files one by one of all lists\n\
