@@ -640,7 +640,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
         --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
     -l                          use a long listing format\n\
-    -n, --num=NUM               max list file nums, default 10000\n\
+    -n, --num=NUM               max list file nums, default 1000\n\
         --remove                delete files one by one of all lists\n\
                                 must be used with --expire-day together\n\
     -s, --size                  print the total size of all files\n\
