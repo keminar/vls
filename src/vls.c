@@ -149,6 +149,7 @@ int main(int argc, char **argv)
     print_nums = 0;
     now_time = time(NULL);
 
+    setbuf(stdout, NULL);
     set_program_name(argv[0]);
     i = decode_switches(argc, argv);
     //printf("i=%d\r\n", i);
@@ -271,7 +272,7 @@ print_dir(const char *dirname, int depth)
     errno = 0;
     dirp = opendir(dirname);
     if (!dirp) {
-        error(LS_FAILURE, errno, _("cannot open directory"), dirname);
+        error(LS_FAILURE, errno, _("cannot open directory %s\n"), dirname);
         return;
     }
     while (1)

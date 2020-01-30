@@ -70,7 +70,7 @@ enum
 static inline void emit_ancillary_info (void)
 {
     printf(_("\nReport '%s' bugs to %s\n"), program_name, PACKAGE_BUGREPORT);
-    printf(_("home page: <https://github.com/keminar/vls>\n"), PACKAGE_NAME);
+    printf(_("home page: <https://github.com/keminar/vls> %s\n"), PACKAGE_NAME);
     fputs(_("Licence GNU software\n"), stdout);
 }
 
