@@ -173,7 +173,7 @@ int main(int argc, char **argv)
         printf("dst=%s\r\n", copy_to_dir);
     }
     if (print_size) {
-        printf("total %d\n", total_size);
+        printf("total %jd\n", total_size);
     }
     exit(exit_status);
 }
@@ -371,15 +371,15 @@ human_readable (off_t n, char *buf)
 {
     // 为了编译能过，第一个if写成这样
     if (n / 1024 > 1024 * 1024 * 1024) {
-        sprintf (buf, "%d.%dT", n / 1024 / 1024 / 1024 / 1024, ((n /1024 ) % (1024 * 1024 * 1024) != 0));
+        sprintf (buf, "%lld.%lldT", (long long)n / 1024 / 1024 / 1024 / 1024, (long long)((n /1024 ) % (1024 * 1024 * 1024) != 0));
     } else if (n > 1024 * 1024 * 1024 ) {
-        sprintf (buf, "%d.%dG", n / 1024 / 1024 / 1024, (n % (1024 * 1024 * 1024) != 0));
+        sprintf (buf, "%lld.%lldG", (long long)n / 1024 / 1024 / 1024, (long long)(n % (1024 * 1024 * 1024) != 0));
     } else if (n > 1024 * 1024 ) {
-        sprintf (buf, "%dM", n / 1024 / 1024);
+        sprintf (buf, "%lldM", (long long)n / 1024 / 1024);
     } else if (n > 1024 ) {
-        sprintf (buf, "%dK", n / 1024);
+        sprintf (buf, "%lldK", (long long)n / 1024);
     } else {
-        sprintf (buf, "%d", n);
+        sprintf (buf, "%jd", (intmax_t)n);
     }
     return buf;
 }
