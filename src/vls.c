@@ -372,7 +372,6 @@ print_dir(const char *dirname, char const *backup_dir, int depth)
 {
     DIR *dirp;
     struct dirent *next;
-    static bool first = true;
     int index = 0;
     //printf("%s\n", dirname);
 
