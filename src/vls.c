@@ -780,7 +780,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
         fputs(_("\
         --backup-to=TARGET      backup deleted expire files to TARGET directory\n\
                                 must be used with --expire-day and --remove together\n\
-    -d  --depth=NUM             list subdirectories recursively depth\n\
+    -d, --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
     -l                          use a long listing format\n\
     -n, --num=NUM               max list file nums, default 1000\n\
