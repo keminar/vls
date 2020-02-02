@@ -121,7 +121,6 @@ enum {
     GETOPT_VERSION_CHAR = CHAR_MAX - 3,
     AUTHOR_OPTION = CHAR_MAX + 1,
     BACKUP_OPTION,
-    DEPTH_OPTION,
     EXPIRE_DAY_OPTION,
     REMOVE_OPTION,
     SLEEP_OPTION
@@ -152,7 +151,7 @@ enum {
 static struct option const long_options[] = 
 {
     {"backup-to", required_argument, NULL, BACKUP_OPTION},
-    {"depth", required_argument, NULL, DEPTH_OPTION},
+    {"depth", required_argument, NULL, 'd'},
     {"expire-day", required_argument, NULL, EXPIRE_DAY_OPTION},
     {"num", required_argument, NULL, 'n'},
     {"remove", no_argument, NULL, REMOVE_OPTION},
@@ -270,9 +269,6 @@ int main(int argc, char **argv)
         } while (i < argc);
     }
 
-    if (target_directory != NULL) {
-        printf("dst=%s\r\n", target_directory);
-    }
     if (print_size) {
         printf("total %jd\n", total_size);
     }
@@ -548,15 +544,15 @@ static void mkdir_all(const char *dirs, struct stat src_st) {
         parent = mdir_name(dirs);
         if (stat(parent, &parent_sb) != 0) {
             mkdir_all(parent, src_st);
-        } else {
-            if (mkdir(dirs, src_st.st_mode) != 0) {
-                error(LS_FAILURE, errno, _("cannot create directory %s"), dirs);
-            }
+        }
+        //printf("mkdir %s\n", dirs);
+        if (mkdir(dirs, src_st.st_mode) != 0) {
+            error(LS_FAILURE, errno, _("cannot create directory %s"), dirs);
         }
     } else if (S_ISDIR(dst_sb.st_mode)) {
         return;
     } else {
-        error(LS_FAILURE, 0, _("cannot create directory %s"), dirs);
+        error(LS_FAILURE, 0, _("%s is not a directory"), dirs);
     }
 }
 
@@ -651,7 +647,7 @@ static int decode_switches(int argc, char **argv)
         //(2)一个字符，后接一个冒号——表示选项后面带一个参数，如-a 100
         //(3)一个字符，后接两个冒号——表示选项后面带一个可选参数，选项与参数之间不能有空格, 形式应该如-b200
         int c = getopt_long(argc, argv, 
-                            "cln:s",
+                            "d:ln:s",
                             long_options, &oi);
 
         //每次执行会打印多次, 最后一次也是-1
@@ -677,7 +673,7 @@ static int decode_switches(int argc, char **argv)
                 }
                 break;
             }
-            case DEPTH_OPTION:
+            case 'd':
             {
                 //初始化，防被其它影响
                 errno = 0;
@@ -785,7 +781,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
         fputs(_("\
         --backup-to=TARGET      backup deleted expire files to TARGET directory\n\
                                 must be used with --expire-day and --remove together\n\
-        --depth=NUM             list subdirectories recursively depth\n\
+    -d  --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
     -l                          use a long listing format\n\
     -n, --num=NUM               max list file nums, default 1000\n\
