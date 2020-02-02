@@ -48,8 +48,7 @@ static uintmax_t total_size;
 static int now_time;
 
 // 把文件copy到此目录
-static char *copy_to_dir;
-static bool copy_to_opt;
+static char *target_directory;
 
 /* True means to display author information.  */
 
@@ -76,19 +75,20 @@ enum format
 
 static enum format format;
 
+// 解开命令行参数
 static int decode_switches(int argc, char **argv);
 void usage(int status);
 static inline void emit_ancillary_info (void);
 static void gobble_file(char const *name, enum filetype type,
                             ino_t inode, bool command_line_arg,
-                            char const *dirname, int depth);
+                            char const *dirname, char const *backup_dir, int depth);
 static void attach(char *dest, const char *dirname, const char *name);                            
-static void print_dir(const char *absolute_name, int depth);
-static void print_current_file (const char *absolute_name, struct stat st);
+static void print_dir(const char *absolute_name, char const *backup_dir, int depth);
+static void print_current_file (const char *absolute_name, struct stat st, char const *backup_name);
 
-static void print_long_format(const char *absolute_name, struct stat st);
-static void print_one_per_line(const char *absolute_name, struct stat st);
-static void judge_dir_file(const char *absolute_name, struct stat st);
+static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name);
+static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name);
+static void judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name);
 
 char *
 human_readable (off_t n, char *buf);
@@ -99,6 +99,19 @@ format_group (gid_t g, int width, bool stat_ok);
 static void
 format_user_or_group (char const *name, unsigned long int id, int width);
 
+//最后一级目录或文件，可能有反斜线
+char *
+last_component (char const *name);
+//不计算反斜线的文件名长度
+size_t
+base_len (char const *name);
+// 去掉尾部的反斜线
+bool
+strip_trailing_slashes (char *file);
+// 取上级目录
+char *mdir_name( char const *file);
+static void mkdir_all(const char *dirs, struct stat src_st);
+
 enum {
     LS_MINOR_PROBLEM = 1,
     LS_FAILURE = 2
@@ -107,12 +120,24 @@ enum {
     GETOPT_HELP_CHAR = CHAR_MAX - 2,
     GETOPT_VERSION_CHAR = CHAR_MAX - 3,
     AUTHOR_OPTION = CHAR_MAX + 1,
-    COPY_OPTION,
+    BACKUP_OPTION,
     DEPTH_OPTION,
     EXPIRE_DAY_OPTION,
     REMOVE_OPTION,
     SLEEP_OPTION
 };
+
+// 获取路径中的文件名
+#define ASSIGN_BASENAME_STRDUPA(Dest, File_name)	\
+  do							\
+    {							\
+      char *tmp_abns_;					\
+      ASSIGN_STRDUPA (tmp_abns_, (File_name));		\
+      Dest = last_component (tmp_abns_);		\
+      strip_trailing_slashes (Dest);			\
+    }							\
+  while (0)
+
 
 #define GETOPT_HELP_OPTION_DECL \
     "help", no_argument, NULL, GETOPT_HELP_CHAR
@@ -126,7 +151,7 @@ enum {
 //optional_argument(或者是2)时  ——参数输入格式只能为：--参数=值
 static struct option const long_options[] = 
 {
-    {"copy-to", required_argument, NULL, COPY_OPTION},
+    {"backup-to", required_argument, NULL, BACKUP_OPTION},
     {"depth", required_argument, NULL, DEPTH_OPTION},
     {"expire-day", required_argument, NULL, EXPIRE_DAY_OPTION},
     {"num", required_argument, NULL, 'n'},
@@ -139,15 +164,91 @@ static struct option const long_options[] =
     {NULL, 0, NULL, 0}
 };
 
+
+char *
+last_component (char const *name)
+{
+  char const *base = name;
+  char const *p;
+  bool saw_slash = false;
+
+  while (ISSLASH (*base))
+    base++;
+
+  for (p = base; *p; p++)
+    {
+      if (ISSLASH (*p))
+	saw_slash = true;
+      else if (saw_slash)
+	{
+	  base = p;
+	  saw_slash = false;
+	}
+    }
+
+  return (char *) base;
+}
+
+
+size_t
+base_len (char const *name)
+{
+  size_t len;
+
+  for (len = strlen (name);  1 < len && ISSLASH (name[len - 1]);  len--)
+    continue;
+
+  return len;
+}
+
+
+bool
+strip_trailing_slashes (char *file)
+{
+  char *base = last_component (file);
+  char *base_lim;
+  bool had_slash;
+
+  /* last_component returns "" for file system roots, but we need to turn
+     `///' into `/'.  */
+  if (! *base)
+    base = file;
+  base_lim = base + base_len (base);
+  had_slash = (*base_lim != '\0');
+  *base_lim = '\0';
+  return had_slash;
+}
+
+char *mdir_name( char const *file)
+{
+    size_t length;
+    for (length = last_component(file) - file; length > 0 ; length--) {
+        if (!ISSLASH(file[length - 1])) {
+            break;
+        }
+    }
+    bool append_dot = (length == 0);
+    char *dir = malloc(length + append_dot + 1);
+    if (!dir) {
+        return NULL;
+    }
+    memcpy(dir, file, length);
+    if (append_dot) {
+        dir[length++] = '.';
+    }
+    dir[length] = '\0';
+    return dir;
+}
+
 int main(int argc, char **argv)
 {
     int i;
     int n_files;
 
-    copy_to_opt = false;
     expire_opt_set = false;
     print_nums = 0;
     now_time = time(NULL);
+    target_directory = NULL;
 
     setbuf(stdout, NULL);
     set_program_name(argv[0]);
@@ -161,16 +262,16 @@ int main(int argc, char **argv)
     n_files = argc - i;
     if (n_files <= 0) {
         // 没传入目录
-        gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "", 0);
+        gobble_file(".", directory, NOT_AN_INODE_NUMBER, true, "", target_directory, 0);
     } else {
         // 有传入目录
         do {
-            gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "", 0);
+            gobble_file(argv[i++], unknown, NOT_AN_INODE_NUMBER, true, "", target_directory, 0);
         } while (i < argc);
     }
 
-    if (copy_to_dir != NULL) {
-        printf("dst=%s\r\n", copy_to_dir);
+    if (target_directory != NULL) {
+        printf("dst=%s\r\n", target_directory);
     }
     if (print_size) {
         printf("total %jd\n", total_size);
@@ -180,7 +281,7 @@ int main(int argc, char **argv)
 
 static void
 gobble_file(char const *name, enum filetype type, ino_t inode, 
-            bool command_line_arg, char const *dirname, int depth)
+            bool command_line_arg, char const *dirname, char const *backup_dir, int depth)
 {
     // 如果command_line_arg 为false或者inode 为0则正常
     assert (! command_line_arg || inode == NOT_AN_INODE_NUMBER);
@@ -188,6 +289,7 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
     
     char *absolute_name;
     int err;
+    char *backup_name = NULL;
     // 全路径或是顶级路径
     if (name[0] == '/' || dirname[0] == 0)
         absolute_name = (char *) name;
@@ -216,6 +318,16 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
         error(LS_FAILURE, err, _("cannot access %s\n"), absolute_name);
         return;
     }
+    if (backup_dir) {
+        char *name_base;
+        ASSIGN_BASENAME_STRDUPA (name_base, name);
+        if (! dot_or_dotdot(name_base)) {
+            backup_name = alloca(strlen(name_base) + strlen(backup_dir) + 2);
+            attach(backup_name, backup_dir, name_base);
+        } else {
+            backup_name = strdup(backup_dir);
+        }
+    }
 
     //@todo 根据st.st_dev, st.st_ino检查文件是否被访问过，防止软链导致死循环
 
@@ -232,27 +344,26 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
         */
     if (S_ISLNK (st.st_mode)) {
         //printf("link: %s \n", absolute_name);
-        print_current_file(absolute_name, st);
+        print_current_file(absolute_name, st, backup_name);
     } else if (S_ISDIR(st.st_mode)) {
         //printf("depth=%d\n", depth);
         //printf("dir: %s \n", absolute_name);
-        
         if (depth >= depth_max_num) {
             if (!command_line_arg || depth_max_num == 0) {
-                print_current_file(absolute_name, st);
+                print_current_file(absolute_name, st, backup_name);
             }
             return;
         } else {
             //如果要往下访问，提前+1
             depth++;
-            print_dir(absolute_name, depth);
+            print_dir(absolute_name, backup_name, depth);
             if (!command_line_arg || depth_max_num == 0) {
-                print_current_file(absolute_name, st);
+                print_current_file(absolute_name, st, backup_name);
             }
         }
     } else {
         //printf("file: %s \n", absolute_name);
-        print_current_file(absolute_name, st);
+        print_current_file(absolute_name, st, backup_name);
     }
     // 让电脑休息一下
     if (sleep_time > 0) {
@@ -261,7 +372,7 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
 }
 
 static void
-print_dir(const char *dirname, int depth)
+print_dir(const char *dirname, char const *backup_dir, int depth)
 {
     DIR *dirp;
     struct dirent *next;
@@ -294,7 +405,7 @@ print_dir(const char *dirname, int depth)
                     case DT_REG:  type = normal;		break;
                     case DT_SOCK: type = sock;		break;
                 }
-                gobble_file(next->d_name, type, next->d_ino, false, dirname, depth);
+                gobble_file(next->d_name, type, next->d_ino, false, dirname, backup_dir, depth);
             }
         } else if (errno != 0) {
             error(LS_FAILURE, errno, _("reading directory %s\n"), dirname);
@@ -310,22 +421,22 @@ print_dir(const char *dirname, int depth)
 }
 
 // 因为有存在打印多个目录的文件，所以统计用完整目录打印，不然要处理很多格式问题
-static void print_current_file (const char *absolute_name, struct stat st)
+static void print_current_file (const char *absolute_name, struct stat st, char const *backup_name)
 {
     total_size += st.st_size;
     switch (format)
     {
         case one_per_line:
-            print_one_per_line (absolute_name, st);
+            print_one_per_line (absolute_name, st, backup_name);
             break;
         case long_format:
-            print_long_format(absolute_name, st);
+            print_long_format(absolute_name, st, backup_name);
             break;
     }
 }
 
 // 打印多些数据
-static void print_long_format(const char *absolute_name, struct stat st)
+static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name)
 {
     char modebuf[12];
     struct tm *when_local;
@@ -355,7 +466,7 @@ static void print_long_format(const char *absolute_name, struct stat st)
     p = buf;
 
     putchar (' ');
-    judge_dir_file(absolute_name, st);
+    judge_dir_file(absolute_name, st, backup_name);
 
     when_local = localtime (&st.st_mtime);
 
@@ -424,24 +535,50 @@ format_group (gid_t g, int width, bool stat_ok)
 
 
 // 只打印文件名
-static void print_one_per_line(const char *absolute_name, struct stat st)
+static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name)
 {
-    judge_dir_file(absolute_name, st);
+    judge_dir_file(absolute_name, st, backup_name);
     printf("%s\n", absolute_name);
 }
 
-// 删除目录和文件
-static void judge_dir_file(const char *absolute_name, struct stat st)
-{
-    if (copy_to_opt) {
-        printf("\nwait...\n");
-        exit(1);
+static void mkdir_all(const char *dirs, struct stat src_st) {
+    struct stat dst_sb, parent_sb;
+    char *parent;
+    if (stat(dirs, &dst_sb) != 0) { 
+        parent = mdir_name(dirs);
+        if (stat(parent, &parent_sb) != 0) {
+            mkdir_all(parent, src_st);
+        } else {
+            if (mkdir(dirs, src_st.st_mode) != 0) {
+                error(LS_FAILURE, errno, _("cannot create directory %s"), dirs);
+            }
+        }
+    } else if (S_ISDIR(dst_sb.st_mode)) {
+        return;
+    } else {
+        error(LS_FAILURE, 0, _("cannot create directory %s"), dirs);
     }
+}
+
+// 删除目录和文件
+static void judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name)
+{
     if (!expire_opt_set) {
         return;
     }
     if (now_time - st.st_mtime > 86400 * expire_day) {
-        if (remove_expire_file) {
+        if (remove_expire_file) {        
+            if (target_directory) {
+                if (S_ISDIR(st.st_mode)) {
+                    mkdir_all(backup_name, st);
+                } else if (S_ISREG(st.st_mode)) {
+                    char *parent = mdir_name(backup_name);
+                    mkdir_all(parent, st);
+                    if (rename(absolute_name, backup_name) != 0) {
+                        error(LS_FAILURE, errno, _("cannot move %s to %s"), absolute_name, backup_name);
+                    }
+                }
+            }
             fputs ("rem ", stdout);
             if (S_ISDIR(st.st_mode)) {
                 rmdir(absolute_name);
@@ -524,11 +661,20 @@ static int decode_switches(int argc, char **argv)
         }
         switch (c)
         {
-            case COPY_OPTION:
+            case BACKUP_OPTION:
             {
-                copy_to_dir = (char *)optarg;
-                //copy_to_dir = strdup(optarg)
-                copy_to_opt = true;
+                if (target_directory) {
+                    error(LS_FAILURE, 0, _("MULTIPLE target directories specified"));
+                } else {
+                    struct stat st;
+                    if (stat(optarg, &st) != 0) {
+                        error(LS_FAILURE, errno, _("accessing %s"), optarg);
+                    }
+                    if (! S_ISDIR(st.st_mode)) {
+                        error(LS_FAILURE, 0, _("target %s is not a directory"), optarg);
+                    } 
+                    target_directory = (char *)optarg;   
+                }
                 break;
             }
             case DEPTH_OPTION:
@@ -637,7 +783,8 @@ Slow list information about the FILEs (the current directory by default).\n\
 Mandatory arguments to long options are mandatory for short options too.\n\
 "), stdout);
         fputs(_("\
-        --copy-to=TARGET        copy list files to TARGET directory\n\
+        --backup-to=TARGET      backup deleted expire files to TARGET directory\n\
+                                must be used with --expire-day and --remove together\n\
         --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
     -l                          use a long listing format\n\

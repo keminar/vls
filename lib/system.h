@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 # include <stdbool.h>
+#include <string.h>
 #include "progname.h"
 #include "../config.h"
 
@@ -29,6 +30,8 @@ enum
 # define ISSLASH(C) ((C) == DIRECTORY_SEPARATOR)
 #endif
 
+
+#define STREQ(a, b) (strcmp (a, b) == 0)
 
 #ifndef MAX
 # define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -62,6 +65,21 @@ enum
 
 #ifndef PID_T_MAX
 # define PID_T_MAX TYPE_MAXIMUM (pid_t)
+#endif
+
+#if defined strdupa
+# define ASSIGN_STRDUPA(DEST, S)		\
+  do { DEST = strdupa (S); } while (0)
+#else
+# define ASSIGN_STRDUPA(DEST, S)		\
+  do						\
+    {						\
+      const char *s_ = (S);			\
+      size_t len_ = strlen (s_) + 1;		\
+      char *tmp_dest_ = alloca (len_);		\
+      DEST = memcpy (tmp_dest_, s_, len_);	\
+    }						\
+  while (0)
 #endif
 
 //使用static修饰符，函数仅在文件内部可见
