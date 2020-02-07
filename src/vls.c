@@ -37,6 +37,7 @@ static int exit_status;
 static size_t depth_max_num;
 //过期时间
 static size_t expire_day;
+static size_t expire_minute;
 static bool expire_opt_set;
 //最大访问数
 static size_t list_max_num;
@@ -56,6 +57,24 @@ static bool print_author;
 
 //打印总大小
 static bool print_size;
+
+// 是否可清掉当前行
+static bool can_clear_line;
+
+//自动模式
+#define FORMAT_A 0
+//回车模式
+#define FORMAT_R 1
+//换行模式
+#define FORMAT_N 2
+
+#define FILE_STA_NONE 0
+#define FILE_STA_REMOVE 1
+#define FILE_STA_EXPIRE 2
+#define FILE_STA_NORMAL 3
+
+//打印模式
+static int print_format;
 
 // True 则删除过期文件
 static bool remove_expire_file;
@@ -88,7 +107,7 @@ static void print_current_file (const char *absolute_name, struct stat st, char 
 
 static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name);
 static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name);
-static void judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name);
+static int judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name);
 
 char *
 human_readable (off_t n, char *buf);
@@ -122,6 +141,7 @@ enum {
     AUTHOR_OPTION = CHAR_MAX + 1,
     BACKUP_OPTION,
     EXPIRE_DAY_OPTION,
+    EXPIRE_MIN_OPTION,
     REMOVE_OPTION,
     SLEEP_OPTION
 };
@@ -153,6 +173,7 @@ static struct option const long_options[] =
     {"backup-to", required_argument, NULL, BACKUP_OPTION},
     {"depth", required_argument, NULL, 'd'},
     {"expire-day", required_argument, NULL, EXPIRE_DAY_OPTION},
+    {"expire-min", required_argument, NULL, EXPIRE_MIN_OPTION},
     {"num", required_argument, NULL, 'n'},
     {"remove", no_argument, NULL, REMOVE_OPTION},
     {"size", no_argument, NULL, 's'},
@@ -248,6 +269,8 @@ int main(int argc, char **argv)
     print_nums = 0;
     now_time = time(NULL);
     target_directory = NULL;
+    print_format = FORMAT_N;
+    can_clear_line = false;
 
     setbuf(stdout, NULL);
     set_program_name(argv[0]);
@@ -270,7 +293,23 @@ int main(int argc, char **argv)
     }
 
     if (print_size) {
-        printf("total %jd\n", total_size);
+        if (print_format == FORMAT_R) {
+            printf("\r\033[K");
+        } else if (print_format == FORMAT_A) {
+            if (can_clear_line == true) {
+                printf("\r\033[K");
+            }
+        }
+
+        char hbuf[LONGEST_HUMAN_READABLE + 1];
+        char const *size = human_readable ((off_t)total_size, hbuf);
+        printf("total %s\n", size);
+    } else if (print_format == FORMAT_R) {
+        printf("\r\033[K");
+    } else if (print_format == FORMAT_A) {
+        if (can_clear_line == true) {
+            printf("\r\033[K");
+        }
     }
     exit(exit_status);
 }
@@ -425,22 +464,31 @@ static void print_current_file (const char *absolute_name, struct stat st, char 
             print_one_per_line (absolute_name, st, backup_name);
             break;
         case long_format:
-            print_long_format(absolute_name, st, backup_name);
-            break;
+            {
+                if (expire_opt_set) {
+                    print_one_per_line (absolute_name, st, backup_name);
+                } else {
+                    print_long_format(absolute_name, st, backup_name);
+                }
+                break;
+            }
     }
 }
 
 // 打印多些数据
 static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name)
 {
+    //todo 如果输出超过可见区域长度会提前换行，导致回车清除不干净
+    if (print_format == FORMAT_R) {
+        printf("\r\033[K");
+    }
     char modebuf[12];
     struct tm *when_local;
     char timeStr[80];
     char *p;
-    char buf[1024];
+    char buf[1024]; 
 
     p = buf;
-
     filemodestring (&st, modebuf);
     sprintf (p, "%s ", modebuf);
     p += strlen (p);
@@ -460,16 +508,18 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     format_group (st.st_gid, 10, true);
     p = buf;
 
-    putchar (' ');
-    judge_dir_file(absolute_name, st, backup_name);
-
     when_local = localtime (&st.st_mtime);
 
     strftime(timeStr,sizeof(timeStr),"%F %T",when_local);
     fputs(timeStr, stdout);
     putchar (' ');
     fputs(absolute_name, stdout);
-    putchar ('\n');
+    if (S_ISDIR(st.st_mode)) {
+        putchar('/');
+    }
+    if (print_format == FORMAT_N) {
+        putchar ('\n');
+    }
 }
 
 char *
@@ -532,8 +582,64 @@ format_group (gid_t g, int width, bool stat_ok)
 // 只打印文件名
 static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name)
 {
-    judge_dir_file(absolute_name, st, backup_name);
-    printf("%s\n", absolute_name);
+    int fs;
+    fs = judge_dir_file(absolute_name, st, backup_name);
+    switch (fs)
+    {
+        case FILE_STA_EXPIRE:
+        {
+            if (print_format == FORMAT_A) {
+                if (can_clear_line) {
+                    printf("\r\033[K");
+                }
+                can_clear_line = false;
+            } else if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            fputs ("expire ", stdout);
+            break;
+        }
+        case FILE_STA_NORMAL:
+        {
+            if (print_format == FORMAT_A) {
+                if (can_clear_line) {
+                    printf("\r\033[K");
+                }
+                can_clear_line = true;
+            } else if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            fputs ("normal ", stdout);
+            break;
+        }
+        case FILE_STA_REMOVE:
+        {
+            if (print_format == FORMAT_A) {
+                if (can_clear_line) {
+                    printf("\r\033[K");
+                }
+                can_clear_line = false;
+            } else if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            fputs ("remove ", stdout);
+            break;
+        }
+        default:
+        {
+            if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            break;
+        }
+    }
+    fputs(absolute_name, stdout);
+    if (S_ISDIR(st.st_mode)) {
+        putchar('/');
+    }
+    if (print_format == FORMAT_N || (print_format == FORMAT_A && can_clear_line == false)) {
+        putchar ('\n');
+    }
 }
 
 static void mkdir_all(const char *dirs, struct stat src_st) {
@@ -556,13 +662,21 @@ static void mkdir_all(const char *dirs, struct stat src_st) {
 }
 
 // 删除目录和文件
-static void judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name)
+static int judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name)
 {
+    size_t diff = 0;
     if (!expire_opt_set) {
-        return;
+        return FILE_STA_NONE;
     }
-    if (now_time - st.st_mtime > 86400 * expire_day) {
+    if (expire_day > 0) {
+        diff = 86400 * expire_day;
+    }
+    if (expire_minute > 0) {
+        diff += 60 * expire_minute;
+    }
+    if (now_time - st.st_mtime > diff) {
         if (remove_expire_file) {        
+            // 备份数据
             if (target_directory) {
                 if (S_ISDIR(st.st_mode)) {
                     mkdir_all(backup_name, st);
@@ -574,18 +688,18 @@ static void judge_dir_file(const char *absolute_name, struct stat st, char const
                     }
                 }
             }
-            fputs ("rem ", stdout);
             if (S_ISDIR(st.st_mode)) {
                 rmdir(absolute_name);
             } else if (S_ISLNK(st.st_mode) || S_ISREG(st.st_mode)) {
                 remove(absolute_name);
             }
+            return FILE_STA_REMOVE;
         } else {
-            fputs ("exp ", stdout);
+            return FILE_STA_EXPIRE;
         }
     } else {
-        fputs("sta ", stdout);
-    }   
+        return FILE_STA_NORMAL;
+    }
 }
 
 // 合并目录和文件名
@@ -622,6 +736,8 @@ static int decode_switches(int argc, char **argv)
     sleep_time = 400;
     list_max_num = 1000;
     print_size = false;
+    expire_day = 0;
+    expire_minute = 0;
 
     {
         char const *p = getenv ("TABSIZE");
@@ -646,7 +762,7 @@ static int decode_switches(int argc, char **argv)
         //(2)一个字符，后接一个冒号——表示选项后面带一个参数，如-a 100
         //(3)一个字符，后接两个冒号——表示选项后面带一个可选参数，选项与参数之间不能有空格, 形式应该如-b200
         int c = getopt_long(argc, argv, 
-                            "d:ln:s",
+                            "d:ln:rs",
                             long_options, &oi);
 
         //每次执行会打印多次, 最后一次也是-1
@@ -703,6 +819,28 @@ static int decode_switches(int argc, char **argv)
                 }
                 expire_day = tmp_ulong;
                 expire_opt_set = true;
+                if ( print_format == FORMAT_N ) {
+                    print_format = FORMAT_A;
+                }
+                break;
+            }
+            case EXPIRE_MIN_OPTION:
+            {
+                //初始化，防被其它影响
+                errno = 0;
+                unsigned long int tmp_ulong;
+                //optarg 表示当前选项对应的参数值
+                tmp_ulong = strtoul(optarg, NULL, 0);
+                // 转成有符号的判断溢出，否则识别不了负数
+                if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                    error (LS_FAILURE, 0, _("invalid --expire-min: %s"),
+                           optarg);
+                }
+                expire_minute = tmp_ulong;
+                expire_opt_set = true;
+                if ( print_format == FORMAT_N ) {
+                    print_format = FORMAT_A;
+                }
                 break;
             }
             case 'l':
@@ -728,6 +866,11 @@ static int decode_switches(int argc, char **argv)
                 //如果要删除,单行输出
                 format = one_per_line;
                 break;
+            case 'r':
+            {
+                print_format = FORMAT_R;
+                break;   
+            }
             case 's':
                 print_size = true;
                 break;
@@ -766,6 +909,7 @@ static int decode_switches(int argc, char **argv)
 
 void usage(int status)
 {
+    //todo 根据环境输出中文提示
     if (status != EXIT_SUCCESS) {
         fprintf(stderr, _("Try '%s --help' for more information\n"), program_name);
     } else {
@@ -782,10 +926,14 @@ Mandatory arguments to long options are mandatory for short options too.\n\
                                 must be used with --expire-day and --remove together\n\
     -d, --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
+        --expire-min=NUM        File's data was last modified n minutes ago.\n\
     -l                          use a long listing format\n\
+                                this option will disappear when with --expire-day\n\
+                                or --expire-min together\n\
     -n, --num=NUM               max list file nums, default 1000\n\
         --remove                delete files one by one of all lists\n\
                                 must be used with --expire-day together\n\
+    -r                          reback to line head and rewrite this line\n\
     -s, --size                  print the total size of all files\n\
         --sleep=NUM             sleep time (ms) when show every one file, default 400\n\
 "), stdout);
