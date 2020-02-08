@@ -76,6 +76,7 @@ vls --sleep=10000
 修改版本修改configure.ac
 
 增加新代码文件
+
     * 修改对应目录的Makefile.am和src目录的Makefile.am
     * 运行 aclocal  autoconf autoheader automake 生成相关文件
 

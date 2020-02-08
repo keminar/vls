@@ -520,8 +520,12 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     putchar (' ');
     fputs(absolute_name, stdout);
     if (S_ISLNK (st.st_mode)) {
-        fputs(" -> ", stdout);
-        fputs(get_link_name(absolute_name, st.st_size), stdout);
+        char *linkname = get_link_name(absolute_name, st.st_size);
+        if (linkname != NULL) {
+            fputs(" -> ", stdout);
+            fputs(linkname, stdout);
+            free(linkname);
+        }
     } else if (S_ISDIR(st.st_mode)) {
         putchar('/');
     }
@@ -642,10 +646,8 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         }
     }
     fputs(absolute_name, stdout);
-    if (S_ISLNK (st.st_mode)) {
-        fputs(" -> ", stdout);
-        fputs(get_link_name(absolute_name, st.st_size), stdout);
-    } else if (S_ISDIR(st.st_mode)) {
+    // 这个模式不对链接文件输出指向的目标名
+    if (S_ISDIR(st.st_mode)) {
         putchar('/');
     }
     if (print_format == FORMAT_N || (print_format == FORMAT_A && can_clear_line == false)) {
@@ -672,6 +674,9 @@ static void mkdir_all(const char *dirs, struct stat src_st) {
         parent = mdir_name(dirs);
         if (stat(parent, &parent_sb) != 0) {
             mkdir_all(parent, src_st);
+        }
+        if (parent != NULL) {
+            free(parent);
         }
         //printf("mkdir %s\n", dirs);
         if (mkdir(dirs, src_st.st_mode) != 0) {
