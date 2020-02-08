@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT(vls, 0.1, 372884399@qq.com)
+AC_INIT(vls, 0.2, 372884399@qq.com)
 AC_CONFIG_SRCDIR([src/vls.c])
 AC_CONFIG_HEADERS([config.h])
 
