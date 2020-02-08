@@ -93,7 +93,7 @@ PROGRAMS = $(bin_PROGRAMS)
 am_vls_OBJECTS = vls.$(OBJEXT)
 vls_OBJECTS = $(am_vls_OBJECTS)
 vls_DEPENDENCIES = ../lib/libprogname.a ../lib/libhuman.a \
-	../lib/libfilemode.a ../lib/libidcache.a
+	../lib/libfilemode.a ../lib/libidcache.a ../lib/libareadlink.a
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -240,7 +240,7 @@ top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
 INCLUDE = -I../include
 vls_SOURCES = vls.c
-vls_LDADD = ../lib/libprogname.a ../lib/libhuman.a ../lib/libfilemode.a ../lib/libidcache.a
+vls_LDADD = ../lib/libprogname.a ../lib/libhuman.a ../lib/libfilemode.a ../lib/libidcache.a ../lib/libareadlink.a
 all: all-am
 
 .SUFFIXES:

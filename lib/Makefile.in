@@ -94,6 +94,10 @@ AM_V_AR = $(am__v_AR_@AM_V@)
 am__v_AR_ = $(am__v_AR_@AM_DEFAULT_V@)
 am__v_AR_0 = @echo "  AR      " $@;
 am__v_AR_1 = 
+libareadlink_a_AR = $(AR) $(ARFLAGS)
+libareadlink_a_LIBADD =
+am_libareadlink_a_OBJECTS = areadlink-with-size.$(OBJEXT)
+libareadlink_a_OBJECTS = $(am_libareadlink_a_OBJECTS)
 libfilemode_a_AR = $(AR) $(ARFLAGS)
 libfilemode_a_LIBADD =
 am_libfilemode_a_OBJECTS = filemode.$(OBJEXT)
@@ -138,10 +142,12 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libfilemode_a_SOURCES) $(libhuman_a_SOURCES) \
-	$(libidcache_a_SOURCES) $(libprogname_a_SOURCES)
-DIST_SOURCES = $(libfilemode_a_SOURCES) $(libhuman_a_SOURCES) \
-	$(libidcache_a_SOURCES) $(libprogname_a_SOURCES)
+SOURCES = $(libareadlink_a_SOURCES) $(libfilemode_a_SOURCES) \
+	$(libhuman_a_SOURCES) $(libidcache_a_SOURCES) \
+	$(libprogname_a_SOURCES)
+DIST_SOURCES = $(libareadlink_a_SOURCES) $(libfilemode_a_SOURCES) \
+	$(libhuman_a_SOURCES) $(libidcache_a_SOURCES) \
+	$(libprogname_a_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -256,11 +262,12 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
-noinst_LIBRARIES = libprogname.a libhuman.a libfilemode.a libidcache.a
+noinst_LIBRARIES = libprogname.a libhuman.a libfilemode.a libidcache.a libareadlink.a
 libprogname_a_SOURCES = progname.h progname.c system.h intprops.h
 libhuman_a_SOURCES = human.h human.c
 libfilemode_a_SOURCES = filemode.h filemode.c
 libidcache_a_SOURCES = idcache.h idcache.c
+libareadlink_a_SOURCES = areadlink.h areadlink-with-size.c
 all: all-am
 
 .SUFFIXES:
@@ -299,6 +306,11 @@ $(am__aclocal_m4_deps):
 clean-noinstLIBRARIES:
 	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
 
+libareadlink.a: $(libareadlink_a_OBJECTS) $(libareadlink_a_DEPENDENCIES) $(EXTRA_libareadlink_a_DEPENDENCIES) 
+	$(AM_V_at)-rm -f libareadlink.a
+	$(AM_V_AR)$(libareadlink_a_AR) libareadlink.a $(libareadlink_a_OBJECTS) $(libareadlink_a_LIBADD)
+	$(AM_V_at)$(RANLIB) libareadlink.a
+
 libfilemode.a: $(libfilemode_a_OBJECTS) $(libfilemode_a_DEPENDENCIES) $(EXTRA_libfilemode_a_DEPENDENCIES) 
 	$(AM_V_at)-rm -f libfilemode.a
 	$(AM_V_AR)$(libfilemode_a_AR) libfilemode.a $(libfilemode_a_OBJECTS) $(libfilemode_a_LIBADD)
@@ -325,6 +337,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/areadlink-with-size.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/filemode.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/human.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/idcache.Po@am__quote@

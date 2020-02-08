@@ -16,6 +16,7 @@
 #include "../lib/human.h"
 #include "../lib/filemode.h"
 #include "../lib/idcache.h"
+#include "../lib/areadlink.h"
 
 enum filetype
 {
@@ -97,6 +98,7 @@ static enum format format;
 // 解开命令行参数
 static int decode_switches(int argc, char **argv);
 void usage(int status);
+void usage_zh(int status);
 static inline void emit_ancillary_info (void);
 static void gobble_file(char const *name, enum filetype type,
                             ino_t inode, bool command_line_arg,
@@ -108,6 +110,9 @@ static void print_current_file (const char *absolute_name, struct stat st, char 
 static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name);
 static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name);
 static int judge_dir_file(const char *absolute_name, struct stat st, char const *backup_name);
+
+static char *
+get_link_name (char const *filename, size_t size);
 
 char *
 human_readable (off_t n, char *buf);
@@ -514,7 +519,10 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     fputs(timeStr, stdout);
     putchar (' ');
     fputs(absolute_name, stdout);
-    if (S_ISDIR(st.st_mode)) {
+    if (S_ISLNK (st.st_mode)) {
+        fputs(" -> ", stdout);
+        fputs(get_link_name(absolute_name, st.st_size), stdout);
+    } else if (S_ISDIR(st.st_mode)) {
         putchar('/');
     }
     if (print_format == FORMAT_N) {
@@ -634,12 +642,27 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         }
     }
     fputs(absolute_name, stdout);
-    if (S_ISDIR(st.st_mode)) {
+    if (S_ISLNK (st.st_mode)) {
+        fputs(" -> ", stdout);
+        fputs(get_link_name(absolute_name, st.st_size), stdout);
+    } else if (S_ISDIR(st.st_mode)) {
         putchar('/');
     }
     if (print_format == FORMAT_N || (print_format == FORMAT_A && can_clear_line == false)) {
         putchar ('\n');
     }
+}
+
+static char *
+get_link_name (char const *filename, size_t size)
+{
+    char *linkname;
+    linkname = areadlink_with_size (filename, size);
+    if (linkname == NULL) {
+        error (LS_FAILURE, errno, _("cannot read symbolic link %s"),
+                  filename);
+    }
+    return linkname;
 }
 
 static void mkdir_all(const char *dirs, struct stat src_st) {
@@ -680,7 +703,7 @@ static int judge_dir_file(const char *absolute_name, struct stat st, char const 
             if (target_directory) {
                 if (S_ISDIR(st.st_mode)) {
                     mkdir_all(backup_name, st);
-                } else if (S_ISREG(st.st_mode)) {
+                } else if (S_ISLNK(st.st_mode) || S_ISREG(st.st_mode)) {
                     char *parent = mdir_name(backup_name);
                     mkdir_all(parent, st);
                     if (rename(absolute_name, backup_name) != 0) {
@@ -909,7 +932,14 @@ static int decode_switches(int argc, char **argv)
 
 void usage(int status)
 {
-    //todo 根据环境输出中文提示
+    char const *lang_env;
+    
+    lang_env = getenv ("LANG");
+    if (strcmp(lang_env, "zh_CN.UTF-8") == 0) {
+        usage_zh(status);
+        return;
+    }
+
     if (status != EXIT_SUCCESS) {
         fprintf(stderr, _("Try '%s --help' for more information\n"), program_name);
     } else {
@@ -943,6 +973,50 @@ Exit status:\n\
     0   if OK,\n\
     1   if minor problems(e.g., cannot access subdirectory),\n\
     2   if serious trouble (e.g., cannot access command-line argument).\n\
+"), stdout);
+        emit_ancillary_info();
+    }
+    exit(status);
+}
+
+// 中文
+void usage_zh(int status)
+{
+    if (status != EXIT_SUCCESS) {
+        fprintf(stderr, _("Try '%s --help' for more information\n"), program_name);
+    } else {
+        printf(_("用法: %s [OPTION]... [FILE]...\n"), program_name);
+        fputs(_("\
+1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f)\n\
+2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)\n\
+3. 统计目录总大小. 代替(du -sh dir/) \n\
+注：参数[FILE]不提供时默认操作当前目录.\n\
+\n\
+"), stdout);
+        fputs(_("\
+凡对长选项来说不可省略的参数,对于短选项也是不可省略的.\n\
+"), stdout);
+        fputs(_("\
+        --backup-to=TARGET      备份要删除的过期文件到目标目录\n\
+                                必须和 --expire-day 以及 --remove 一起使用时才有效\n\
+    -d, --depth=NUM             显示子文件夹深度，默认为0\n\
+        --expire-day=NUM        检查最后修改日期为 n*24 小时前的文件.\n\
+        --expire-min=NUM        检查最后修改日期为 n 分钟前的文件.\n\
+    -l                          使用长列表格式\n\
+                                如果使用了 --expire-day 或 --expire-min 此选项失效 \n\
+    -n, --num=NUM               最大显示文件数, 默认 1000\n\
+        --remove                删除过期文件\n\
+                                需要配合 --expire-day 或 --expire-min 使用\n\
+    -r                          同一行覆盖刷新输出\n\
+    -s, --size                  打印访问过的文件的总大小\n\
+        --sleep=NUM             每打印一个文件的休息间隔 (毫秒) , 默认 400毫秒\n\
+"), stdout);
+        fputs(_("\
+\n\
+Exit status:\n\
+    0   正确,\n\
+    1   轻微错误(如: 无法访问子文件夹),\n\
+    2   严重错误 (如: 无法解析命令行参数).\n\
 "), stdout);
         emit_ancillary_info();
     }
