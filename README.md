@@ -27,7 +27,7 @@ make install
 ===
 ```
 : vls [OPTION]... [FILE]...
-1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f)
+1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f 或 find . -maxdepth 2)
 2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)
 3. 统计目录总大小. 代替(du -sh dir/) 
 注：参数[FILE]不提供时默认操作当前目录.
