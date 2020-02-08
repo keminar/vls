@@ -1,5 +1,60 @@
 # vls
-very slowly read files and show the files in time
 
+功能：
+===
+1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f)
+2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)
+3. 统计目录总大小. 代替(du -sh dir/)
 
-慢慢读取文件减少磁盘IO， 及时输出符合条件的文件给用户一个响应。
+中文帮助
+===
+```
+export LANG=zh_CN.UTF-8
+```
+
+用法
+===
+```
+: vls [OPTION]... [FILE]...
+1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f)
+2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)
+3. 统计目录总大小. 代替(du -sh dir/) 
+注：参数[FILE]不提供时默认操作当前目录.
+
+凡对长选项来说不可省略的参数,对于短选项也是不可省略的.
+        --backup-to=TARGET      备份要删除的过期文件到目标目录
+                                必须和 --expire-day 以及 --remove 一起使用时才有效
+    -d, --depth=NUM             显示子文件夹深度，默认为0
+        --expire-day=NUM        检查最后修改日期为 n*24 小时前的文件.
+        --expire-min=NUM        检查最后修改日期为 n 分钟前的文件.
+    -l                          使用长列表格式
+                                如果使用了 --expire-day 或 --expire-min 此选项失效 
+    -n, --num=NUM               最大显示文件数, 默认 1000
+        --remove                删除过期文件
+                                需要配合 --expire-day 或 --expire-min 使用
+    -r                          同一行覆盖刷新输出
+    -s, --size                  打印访问过的文件的总大小
+        --sleep=NUM             每打印一个文件的休息间隔 (毫秒) , 默认 400毫秒
+```
+
+示例
+===
+```
+# 查看两级文件夹文件
+vls -d2 -l
+
+# 查看文件夹内修改时间超过2分钟前的文件
+vls --expire-min=2
+
+# 删除文件夹内修改时间超过2分钟前的文件
+vls --expire-min=2 --remove
+
+# 删除/src下的过期文件前做备份
+vls --expire-min=2 --remove --backup-to=/tmp/ /src/
+
+#查看文件夹大小
+vls -sr
+
+#增加cpu, io休息时间
+vls --sleep=10000
+```
