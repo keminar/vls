@@ -935,7 +935,7 @@ void usage(int status)
     char const *lang_env;
     
     lang_env = getenv ("LANG");
-    if (strcmp(lang_env, "zh_CN.UTF-8") == 0) {
+    if (lang_env != NULL && strcmp(lang_env, "zh_CN.UTF-8") == 0) {
         usage_zh(status);
         return;
     }
