@@ -74,7 +74,7 @@ static bool can_clear_line;
 #define FILE_STA_EXPIRE 2
 #define FILE_STA_NORMAL 3
 
-#define DU_UNIT = 1024
+#define DU_UNIT 1024
 
 //打印模式
 static int print_format;
