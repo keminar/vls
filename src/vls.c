@@ -541,9 +541,9 @@ human_readable (off_t n, char *buf)
 {
     // 为了编译能过，第一个if写成这样
     if (n / DU_UNIT > DU_UNIT * DU_UNIT * DU_UNIT) {
-        sprintf (buf, "%lld.%lldT", (long long)n / DU_UNIT / DU_UNIT / DU_UNIT / DU_UNIT, (long long)((n /DU_UNIT ) % (DU_UNIT * DU_UNIT * DU_UNIT) != 0));
+        sprintf (buf, "%.2fT", (float)n / DU_UNIT / DU_UNIT / DU_UNIT / DU_UNIT);
     } else if (n > DU_UNIT * DU_UNIT * DU_UNIT ) {
-        sprintf (buf, "%lld.%lldG", (long long)n / DU_UNIT / DU_UNIT / DU_UNIT, (long long)(n % (DU_UNIT * DU_UNIT * DU_UNIT) != 0));
+        sprintf (buf, "%.2fG", (float)n / DU_UNIT / DU_UNIT / DU_UNIT);
     } else if (n > DU_UNIT * DU_UNIT ) {
         sprintf (buf, "%lldM", (long long)n / DU_UNIT / DU_UNIT);
     } else if (n > DU_UNIT ) {
