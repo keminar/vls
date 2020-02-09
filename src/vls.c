@@ -74,6 +74,8 @@ static bool can_clear_line;
 #define FILE_STA_EXPIRE 2
 #define FILE_STA_NORMAL 3
 
+#define DU_UNIT = 1024
+
 //打印模式
 static int print_format;
 
@@ -538,14 +540,14 @@ char *
 human_readable (off_t n, char *buf)
 {
     // 为了编译能过，第一个if写成这样
-    if (n / 1000 > 1000 * 1000 * 1000) {
-        sprintf (buf, "%lld.%lldT", (long long)n / 1000 / 1000 / 1000 / 1000, (long long)((n /1000 ) % (1000 * 1000 * 1000) != 0));
-    } else if (n > 1000 * 1000 * 1000 ) {
-        sprintf (buf, "%lld.%lldG", (long long)n / 1000 / 1000 / 1000, (long long)(n % (1000 * 1000 * 1000) != 0));
-    } else if (n > 1000 * 1000 ) {
-        sprintf (buf, "%lldM", (long long)n / 1000 / 1000);
-    } else if (n > 1000 ) {
-        sprintf (buf, "%lldK", (long long)n / 1000);
+    if (n / DU_UNIT > DU_UNIT * DU_UNIT * DU_UNIT) {
+        sprintf (buf, "%lld.%lldT", (long long)n / DU_UNIT / DU_UNIT / DU_UNIT / DU_UNIT, (long long)((n /DU_UNIT ) % (DU_UNIT * DU_UNIT * DU_UNIT) != 0));
+    } else if (n > DU_UNIT * DU_UNIT * DU_UNIT ) {
+        sprintf (buf, "%lld.%lldG", (long long)n / DU_UNIT / DU_UNIT / DU_UNIT, (long long)(n % (DU_UNIT * DU_UNIT * DU_UNIT) != 0));
+    } else if (n > DU_UNIT * DU_UNIT ) {
+        sprintf (buf, "%lldM", (long long)n / DU_UNIT / DU_UNIT);
+    } else if (n > DU_UNIT ) {
+        sprintf (buf, "%lldK", (long long)n / DU_UNIT);
     } else {
         sprintf (buf, "%jd", (intmax_t)n);
     }
