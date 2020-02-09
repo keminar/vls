@@ -538,14 +538,14 @@ char *
 human_readable (off_t n, char *buf)
 {
     // 为了编译能过，第一个if写成这样
-    if (n / 1024 > 1024 * 1024 * 1024) {
-        sprintf (buf, "%lld.%lldT", (long long)n / 1024 / 1024 / 1024 / 1024, (long long)((n /1024 ) % (1024 * 1024 * 1024) != 0));
-    } else if (n > 1024 * 1024 * 1024 ) {
-        sprintf (buf, "%lld.%lldG", (long long)n / 1024 / 1024 / 1024, (long long)(n % (1024 * 1024 * 1024) != 0));
-    } else if (n > 1024 * 1024 ) {
-        sprintf (buf, "%lldM", (long long)n / 1024 / 1024);
-    } else if (n > 1024 ) {
-        sprintf (buf, "%lldK", (long long)n / 1024);
+    if (n / 1000 > 1000 * 1000 * 1000) {
+        sprintf (buf, "%lld.%lldT", (long long)n / 1000 / 1000 / 1000 / 1000, (long long)((n /1000 ) % (1000 * 1000 * 1000) != 0));
+    } else if (n > 1000 * 1000 * 1000 ) {
+        sprintf (buf, "%lld.%lldG", (long long)n / 1000 / 1000 / 1000, (long long)(n % (1000 * 1000 * 1000) != 0));
+    } else if (n > 1000 * 1000 ) {
+        sprintf (buf, "%lldM", (long long)n / 1000 / 1000);
+    } else if (n > 1000 ) {
+        sprintf (buf, "%lldK", (long long)n / 1000);
     } else {
         sprintf (buf, "%jd", (intmax_t)n);
     }
@@ -970,7 +970,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
                                 must be used with --expire-day together\n\
     -r                          reback to line head and rewrite this line\n\
     -s, --size                  print the total size of all files\n\
-        --sleep=NUM             sleep time (ms) when show every one file, default 400\n\
+        --sleep=NUM             sleep time (us) when show every one file, default 400\n\
 "), stdout);
         fputs(_("\
 \n\
@@ -992,7 +992,7 @@ void usage_zh(int status)
     } else {
         printf(_("用法: %s [OPTION]... [FILE]...\n"), program_name);
         fputs(_("\
-1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f)\n\
+1. 查看文件夹内文件, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f 或 find . -maxdepth 2)\n\
 2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)\n\
 3. 统计目录总大小. 代替(du -sh dir/) \n\
 注：参数[FILE]不提供时默认操作当前目录.\n\
@@ -1003,7 +1003,7 @@ void usage_zh(int status)
 "), stdout);
         fputs(_("\
         --backup-to=TARGET      备份要删除的过期文件到目标目录\n\
-                                必须和 --expire-day 以及 --remove 一起使用时才有效\n\
+                                必须和 --expire-day | --expire-min 以及 --remove 一起使用时才有效\n\
     -d, --depth=NUM             显示子文件夹深度，默认为0\n\
         --expire-day=NUM        检查最后修改日期为 n*24 小时前的文件.\n\
         --expire-min=NUM        检查最后修改日期为 n 分钟前的文件.\n\
@@ -1014,7 +1014,7 @@ void usage_zh(int status)
                                 需要配合 --expire-day 或 --expire-min 使用\n\
     -r                          同一行覆盖刷新输出\n\
     -s, --size                  打印访问过的文件的总大小\n\
-        --sleep=NUM             每打印一个文件的休息间隔 (毫秒) , 默认 400毫秒\n\
+        --sleep=NUM             每打印一个文件的休息间隔 (微秒) , 默认 400微秒\n\
 "), stdout);
         fputs(_("\
 \n\

@@ -2,7 +2,7 @@
 
 功能：
 ===
-1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f)
+1. 查看文件夹内文件, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f 或 find . -maxdepth 2)
 2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)
 3. 统计目录总大小. 代替(du -sh dir/)
 
@@ -27,14 +27,14 @@ make install
 ===
 ```
 : vls [OPTION]... [FILE]...
-1. 文件夹内文件查看, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f 或 find . -maxdepth 2)
+1. 查看文件夹内文件, 支持递归查看子文件夹. 代替(ls -l 或 find . -type f 或 find . -maxdepth 2)
 2. 过期文件清理并支持备份. 代替(find . -mtime +3|xargs rm -rf)
 3. 统计目录总大小. 代替(du -sh dir/) 
 注：参数[FILE]不提供时默认操作当前目录.
 
 凡对长选项来说不可省略的参数,对于短选项也是不可省略的.
         --backup-to=TARGET      备份要删除的过期文件到目标目录
-                                必须和 --expire-day 以及 --remove 一起使用时才有效
+                                必须和 --expire-day | --expire-min 以及 --remove 一起使用时才有效
     -d, --depth=NUM             显示子文件夹深度，默认为0
         --expire-day=NUM        检查最后修改日期为 n*24 小时前的文件.
         --expire-min=NUM        检查最后修改日期为 n 分钟前的文件.
@@ -45,7 +45,7 @@ make install
                                 需要配合 --expire-day 或 --expire-min 使用
     -r                          同一行覆盖刷新输出
     -s, --size                  打印访问过的文件的总大小
-        --sleep=NUM             每打印一个文件的休息间隔 (毫秒) , 默认 400毫秒
+        --sleep=NUM             每打印一个文件的休息间隔 (微秒) , 默认 400微秒
 ```
 
 示例
