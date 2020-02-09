@@ -958,7 +958,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
 "), stdout);
         fputs(_("\
         --backup-to=TARGET      backup deleted expire files to TARGET directory\n\
-                                must be used with --expire-day and --remove together\n\
+                                must be used with --expire-day | --expire-min and --remove together\n\
     -d, --depth=NUM             list subdirectories recursively depth\n\
         --expire-day=NUM        File's data was last modified n*24 hours ago.\n\
         --expire-min=NUM        File's data was last modified n minutes ago.\n\
