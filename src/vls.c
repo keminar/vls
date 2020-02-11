@@ -923,7 +923,7 @@ static int decode_switches(int argc, char **argv)
                 print_author = true;
                 break;
             case GETOPT_VERSION_CHAR:
-                printf("ver=0.1\r\n");
+                printf("%s version=%s\r\n", PACKAGE_NAME, PACKAGE_VERSION);
                 break;
             case GETOPT_HELP_CHAR:
                 usage(EXIT_SUCCESS);
@@ -937,6 +937,7 @@ static int decode_switches(int argc, char **argv)
     return optind;
 }
 
+//帮助
 void usage(int status)
 {
     char const *lang_env;
@@ -973,6 +974,8 @@ Mandatory arguments to long options are mandatory for short options too.\n\
     -r                          reback to line head and rewrite this line\n\
     -s, --size                  print the total size of all files\n\
         --sleep=NUM             sleep time (us) when show every one file, default 400\n\
+        --help                  display this help and exit\n\
+        --version               output version information and exit\n\
 "), stdout);
         fputs(_("\
 \n\
@@ -1017,6 +1020,8 @@ void usage_zh(int status)
     -r                          同一行覆盖刷新输出\n\
     -s, --size                  打印访问过的文件的总大小\n\
         --sleep=NUM             每打印一个文件的休息间隔 (微秒) , 默认 400微秒\n\
+        --help                  显示当前的帮助信息\n\
+        --version               显示版本信息并且退出\n\
 "), stdout);
         fputs(_("\
 \n\
