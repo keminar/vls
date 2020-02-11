@@ -924,7 +924,7 @@ static int decode_switches(int argc, char **argv)
                 break;
             case GETOPT_VERSION_CHAR:
                 printf("%s version=%s\r\n", PACKAGE_NAME, PACKAGE_VERSION);
-                break;
+                exit(EXIT_SUCCESS);
             case GETOPT_HELP_CHAR:
                 usage(EXIT_SUCCESS);
                 break;
