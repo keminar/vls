@@ -67,6 +67,9 @@ enum
 # define PID_T_MAX TYPE_MAXIMUM (pid_t)
 #endif
 
+#define CTLESC '\001'
+#define CTLNUL '\177'
+
 #if defined strdupa
 # define ASSIGN_STRDUPA(DEST, S)		\
   do { DEST = strdupa (S); } while (0)

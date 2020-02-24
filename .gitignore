@@ -12,6 +12,7 @@
 .gdb-history
 .kludge-stamp
 .version
+.history
 /autom4te.cache
 /ChangeLog
 /INSTALL
