@@ -11,6 +11,14 @@
 #include <errno.h>
 #include <assert.h>
 #include <time.h>
+#include <termios.h>
+#include <unistd.h>
+#include <signal.h>
+
+#ifndef TIOCGWINSZ
+#include <sys/ioctl.h>
+#endif
+
 #include "../lib/progname.h"
 #include "../lib/system.h"
 #include "../lib/human.h"
@@ -90,6 +98,8 @@ static size_t tabsize;
 //打印的文件数
 static size_t print_nums;
 
+unsigned short int termios_width;
+
 enum format
 {
     long_format,		/* -l and other options that imply -l */
@@ -140,6 +150,13 @@ char *mdir_name( char const *file);
 static void mkdir_all(const char *dirs, struct stat src_st);
 static size_t quote_name(FILE *out, const char *name);
 static char *quote_arg(const char *string);
+
+static void
+pr_winsize(int fd);
+static void
+sig_winch(int signo);
+
+char* substring(const char* ch,int pos,int length);
 
 enum {
     LS_MINOR_PROBLEM = 1,
@@ -313,11 +330,34 @@ int main(int argc, char **argv)
     target_directory = NULL;
     print_format = FORMAT_N;
     can_clear_line = false;
+    termios_width = 80;
+    {
+        char const *p = getenv ("COLUMNS");
+        if (p && *p)
+        {
+            unsigned long int tmp_ulong;
+            tmp_ulong = strtoul(p, NULL, 0);
+            // 转成有符号的判断溢出，否则识别不了负数
+            if (errno != 0 || (int)tmp_ulong > INT_MAX || (int)tmp_ulong < 0) {
+                error (LS_FAILURE, 0, _("invalid width in environment variable COLUMNS: %s"),
+                        quote_arg(p));
+            }
+            termios_width = tmp_ulong;
+        }
+    }
 
     setbuf(stdout, NULL);
     set_program_name(argv[0]);
     i = decode_switches(argc, argv);
     //printf("i=%d\r\n", i);
+
+    if (isatty(STDIN_FILENO) != 0) {
+        if (signal(SIGWINCH, sig_winch) == SIG_ERR) {
+            perror("signal error");
+            return 1;
+        }
+        pr_winsize(STDIN_FILENO);      
+    }
 
     //atexit(close_stdout);
     exit_status = EXIT_SUCCESS;
@@ -516,6 +556,25 @@ static void print_current_file (const char *absolute_name, struct stat st, char 
             }
     }
 }
+char* substring(const char* ch,int pos,int length)  
+{  
+    //定义字符指针 指向传递进来的ch地址
+    char* pch= (char *)ch;  
+    //通过calloc来分配一个length长度的字符数组，返回的是字符指针。
+    char* subch=(char*)calloc(sizeof(char),length+1);  
+    int i;  
+ //只有在C99下for循环中才可以声明变量，这里写在外面，提高兼容性。  
+    pch=pch+pos;  
+//是pch指针指向pos位置。  
+    for(i=0;i<length;i++)  
+    {  
+        subch[i]=*(pch++);  
+//循环遍历赋值数组。  
+    }  
+    subch[length]='\0';//加上字符串结束符。  
+    return subch;       //返回分配的字符数组地址。  
+} 
+
 
 // 打印多些数据
 static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name)
@@ -556,9 +615,15 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     fputs(timeStr, stdout);
     putchar (' ');
     //todo 临时代码
-    if (print_format == FORMAT_R && strlen(absolute_name) > 50) {
-        char tmp[50] = {0};
-        strncpy(tmp, absolute_name, sizeof(tmp) - 1);
+    unsigned short int max_len;
+    if (termios_width > 60) {
+        max_len = termios_width - 60 - 1;
+    } else {
+        max_len = 1;
+    } 
+    // long模式没有FORMAT_A的情况
+    if (print_format == FORMAT_R && strlen(absolute_name) > max_len) {
+        char *tmp = substring(absolute_name, 0, max_len);
         quote_name(stdout, tmp);
     } else {
         quote_name(stdout, absolute_name);
@@ -634,9 +699,14 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         }
     }
     //todo 临时代码
-    if (print_format == FORMAT_R && strlen(absolute_name) > 50) {
-        char tmp[50] = {0};
-        strncpy(tmp, absolute_name, sizeof(tmp) - 1);
+    unsigned short int max_len;
+    if (termios_width > 60) {
+        max_len = termios_width - 60 - 1;
+    } else {
+        max_len = 1;
+    }
+    if (can_clear_line == true && strlen(absolute_name) > max_len) {
+        char *tmp = substring(absolute_name, 0, max_len);
         quote_name(stdout, tmp);
     } else {
         quote_name(stdout, absolute_name);
@@ -806,6 +876,24 @@ static void attach(char *dest, const char *dirname, const char *name)
     }
     // 结束符
     *dest = 0;
+}
+
+static void
+pr_winsize(int fd)
+{
+    struct winsize size;
+
+    if (ioctl(fd, TIOCGWINSZ, (char *)&size) < 0) {
+        perror("TIOCGWINSZ error");
+        return;
+    }
+    termios_width = size.ws_col;
+}
+
+static void
+sig_winch(int signo)
+{
+    pr_winsize(STDIN_FILENO);
 }
 
 // 解析参数
