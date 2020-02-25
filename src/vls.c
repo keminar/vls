@@ -625,6 +625,7 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     if (print_format == FORMAT_R && strlen(absolute_name) >= max_len) {
         char *tmp = substring(absolute_name, 0, max_len - 5);
         quote_name(stdout, tmp);
+        free(tmp);
     } else {
         quote_name(stdout, absolute_name);
     }
@@ -702,6 +703,7 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
     if ((print_format == FORMAT_R || can_clear_line == true) && strlen(absolute_name) >= termios_width) {
         char *tmp = substring(absolute_name, 0, termios_width - 5);
         quote_name(stdout, tmp);
+        free(tmp);
     } else {
         quote_name(stdout, absolute_name);
     }
