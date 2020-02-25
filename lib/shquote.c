@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "shquote.h"
+
 /*
  思路来自 https://blog.csdn.net/liuqz2009/article/details/8776398
  源码来自 http://ftp.gnu.org/gnu/bash/bash-4.2.tar.gz

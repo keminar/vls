@@ -17,6 +17,7 @@
 #include "../lib/filemode.h"
 #include "../lib/idcache.h"
 #include "../lib/areadlink.h"
+#include "../lib/shquote.h"
 
 enum filetype
 {
@@ -137,6 +138,8 @@ strip_trailing_slashes (char *file);
 // 取上级目录
 char *mdir_name( char const *file);
 static void mkdir_all(const char *dirs, struct stat src_st);
+static size_t quote_name(FILE *out, const char *name);
+static char *quote_arg(const char *string);
 
 enum {
     LS_MINOR_PROBLEM = 1,
@@ -267,6 +270,38 @@ char *mdir_name( char const *file)
     return dir;
 }
 
+static char *quote_arg(const char *name)
+{
+    int ret;
+    ret = sh_contains_shell_metas((char *)name);
+    if (ret == 1) {
+        return sh_backslash_quote((char *)name);
+    } else {
+        return (char *)name;
+    }
+}
+
+static size_t quote_name(FILE *out, const char *name)
+{
+    size_t len;
+    char *buf;
+
+    int ret;
+    ret = sh_contains_shell_metas((char *)name);
+    if (ret == 1) {
+        buf =  sh_single_quote(name);
+        len = strlen (buf);
+        fwrite (buf, 1, len, out);
+        free(buf);
+    } else {
+        buf = (char *)name;
+        len = strlen (buf);
+        fwrite (buf, 1, len, out);
+    }
+    
+    return len;
+}
+
 int main(int argc, char **argv)
 {
     int i;
@@ -357,7 +392,7 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
         err = lstat(absolute_name, &st);
     }
     if (err != 0) {
-        error(LS_FAILURE, err, _("cannot access %s\n"), absolute_name);
+        error(LS_FAILURE, err, _("cannot access %s\n"), quote_arg(absolute_name));
         return;
     }
     if (backup_dir) {
@@ -424,7 +459,7 @@ print_dir(const char *dirname, char const *backup_dir, int depth)
     errno = 0;
     dirp = opendir(dirname);
     if (!dirp) {
-        error(LS_FAILURE, errno, _("cannot open directory %s\n"), dirname);
+        error(LS_FAILURE, errno, _("cannot open directory %s\n"), quote_arg(dirname));
         return;
     }
     while (1)
@@ -449,7 +484,7 @@ print_dir(const char *dirname, char const *backup_dir, int depth)
                 gobble_file(next->d_name, type, next->d_ino, false, dirname, backup_dir, depth);
             }
         } else if (errno != 0) {
-            error(LS_FAILURE, errno, _("reading directory %s\n"), dirname);
+            error(LS_FAILURE, errno, _("reading directory %s\n"), quote_arg(dirname));
             break;
         } else {
             break;
@@ -520,7 +555,15 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     strftime(timeStr,sizeof(timeStr),"%F %T",when_local);
     fputs(timeStr, stdout);
     putchar (' ');
-    fputs(absolute_name, stdout);
+    //todo 临时代码
+    if (print_format == FORMAT_R && strlen(absolute_name) > 255) {
+        char tmp[255] = {0};
+        strncpy(tmp, absolute_name, sizeof(tmp) - 1);
+        quote_name(stdout, tmp);
+    } else {
+        quote_name(stdout, absolute_name);
+    }
+    
     if (S_ISLNK (st.st_mode)) {
         char *linkname = get_link_name(absolute_name, st.st_size);
         if (linkname != NULL) {
@@ -535,6 +578,71 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
         putchar ('\n');
     }
 }
+
+// 只打印文件名
+static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name)
+{
+    int fs;
+    fs = judge_dir_file(absolute_name, st, backup_name);
+    switch (fs)
+    {
+        case FILE_STA_EXPIRE:
+        {
+            if (print_format == FORMAT_A) {
+                if (can_clear_line) {
+                    printf("\r\033[K");
+                }
+                can_clear_line = false;
+            } else if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            fputs ("expire ", stdout);
+            break;
+        }
+        case FILE_STA_NORMAL:
+        {
+            if (print_format == FORMAT_A) {
+                if (can_clear_line) {
+                    printf("\r\033[K");
+                }
+                can_clear_line = true;
+            } else if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            fputs ("normal ", stdout);
+            break;
+        }
+        case FILE_STA_REMOVE:
+        {
+            if (print_format == FORMAT_A) {
+                if (can_clear_line) {
+                    printf("\r\033[K");
+                }
+                can_clear_line = false;
+            } else if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            fputs ("remove ", stdout);
+            break;
+        }
+        default:
+        {
+            if (print_format == FORMAT_R) {
+                printf("\r\033[K");
+            }
+            break;
+        }
+    }
+    quote_name(stdout, absolute_name);
+    // 这个模式不对链接文件输出指向的目标名
+    if (S_ISDIR(st.st_mode)) {
+        putchar('/');
+    }
+    if (print_format == FORMAT_N || (print_format == FORMAT_A && can_clear_line == false)) {
+        putchar ('\n');
+    }
+}
+
 
 char *
 human_readable (off_t n, char *buf)
@@ -592,71 +700,6 @@ format_group (gid_t g, int width, bool stat_ok)
                           getgroup (g), g, width);
 }
 
-
-// 只打印文件名
-static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name)
-{
-    int fs;
-    fs = judge_dir_file(absolute_name, st, backup_name);
-    switch (fs)
-    {
-        case FILE_STA_EXPIRE:
-        {
-            if (print_format == FORMAT_A) {
-                if (can_clear_line) {
-                    printf("\r\033[K");
-                }
-                can_clear_line = false;
-            } else if (print_format == FORMAT_R) {
-                printf("\r\033[K");
-            }
-            fputs ("expire ", stdout);
-            break;
-        }
-        case FILE_STA_NORMAL:
-        {
-            if (print_format == FORMAT_A) {
-                if (can_clear_line) {
-                    printf("\r\033[K");
-                }
-                can_clear_line = true;
-            } else if (print_format == FORMAT_R) {
-                printf("\r\033[K");
-            }
-            fputs ("normal ", stdout);
-            break;
-        }
-        case FILE_STA_REMOVE:
-        {
-            if (print_format == FORMAT_A) {
-                if (can_clear_line) {
-                    printf("\r\033[K");
-                }
-                can_clear_line = false;
-            } else if (print_format == FORMAT_R) {
-                printf("\r\033[K");
-            }
-            fputs ("remove ", stdout);
-            break;
-        }
-        default:
-        {
-            if (print_format == FORMAT_R) {
-                printf("\r\033[K");
-            }
-            break;
-        }
-    }
-    fputs(absolute_name, stdout);
-    // 这个模式不对链接文件输出指向的目标名
-    if (S_ISDIR(st.st_mode)) {
-        putchar('/');
-    }
-    if (print_format == FORMAT_N || (print_format == FORMAT_A && can_clear_line == false)) {
-        putchar ('\n');
-    }
-}
-
 static char *
 get_link_name (char const *filename, size_t size)
 {
@@ -682,12 +725,12 @@ static void mkdir_all(const char *dirs, struct stat src_st) {
         }
         //printf("mkdir %s\n", dirs);
         if (mkdir(dirs, src_st.st_mode) != 0) {
-            error(LS_FAILURE, errno, _("cannot create directory %s"), dirs);
+            error(LS_FAILURE, errno, _("cannot create directory %s"), quote_arg(dirs));
         }
     } else if (S_ISDIR(dst_sb.st_mode)) {
         return;
     } else {
-        error(LS_FAILURE, 0, _("%s is not a directory"), dirs);
+        error(LS_FAILURE, 0, _("%s is not a directory"), quote_arg(dirs));
     }
 }
 
@@ -714,7 +757,7 @@ static int judge_dir_file(const char *absolute_name, struct stat st, char const 
                     char *parent = mdir_name(backup_name);
                     mkdir_all(parent, st);
                     if (rename(absolute_name, backup_name) != 0) {
-                        error(LS_FAILURE, errno, _("cannot move %s to %s"), absolute_name, backup_name);
+                        error(LS_FAILURE, errno, _("cannot move %s to %s"), quote_arg(absolute_name), quote_arg(backup_name));
                     }
                 }
             }
@@ -809,10 +852,10 @@ static int decode_switches(int argc, char **argv)
                 } else {
                     struct stat st;
                     if (stat(optarg, &st) != 0) {
-                        error(LS_FAILURE, errno, _("accessing %s"), optarg);
+                        error(LS_FAILURE, errno, _("accessing %s"), quote_arg(optarg));
                     }
                     if (! S_ISDIR(st.st_mode)) {
-                        error(LS_FAILURE, 0, _("target %s is not a directory"), optarg);
+                        error(LS_FAILURE, 0, _("target %s is not a directory"), quote_arg(optarg));
                     } 
                     target_directory = (char *)optarg;   
                 }
