@@ -700,12 +700,12 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
     }
     //todo 临时代码
     unsigned short int max_len;
-    if (termios_width > 60) {
-        max_len = termios_width - 60 - 1;
+    if (termios_width > 1) {
+        max_len = termios_width - 1;
     } else {
         max_len = 1;
     }
-    if (can_clear_line == true && strlen(absolute_name) > max_len) {
+    if ((print_format == FORMAT_R || can_clear_line == true) && strlen(absolute_name) > max_len) {
         char *tmp = substring(absolute_name, 0, max_len);
         quote_name(stdout, tmp);
     } else {
