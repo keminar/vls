@@ -556,8 +556,8 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     fputs(timeStr, stdout);
     putchar (' ');
     //todo 临时代码
-    if (print_format == FORMAT_R && strlen(absolute_name) > 255) {
-        char tmp[255] = {0};
+    if (print_format == FORMAT_R && strlen(absolute_name) > 50) {
+        char tmp[50] = {0};
         strncpy(tmp, absolute_name, sizeof(tmp) - 1);
         quote_name(stdout, tmp);
     } else {
@@ -633,7 +633,14 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
             break;
         }
     }
-    quote_name(stdout, absolute_name);
+    //todo 临时代码
+    if (print_format == FORMAT_R && strlen(absolute_name) > 50) {
+        char tmp[50] = {0};
+        strncpy(tmp, absolute_name, sizeof(tmp) - 1);
+        quote_name(stdout, tmp);
+    } else {
+        quote_name(stdout, absolute_name);
+    }
     // 这个模式不对链接文件输出指向的目标名
     if (S_ISDIR(st.st_mode)) {
         putchar('/');
