@@ -1079,7 +1079,7 @@ static int decode_switches(int argc, char **argv)
         //(2)一个字符，后接一个冒号——表示选项后面带一个参数，如-a 100
         //(3)一个字符，后接两个冒号——表示选项后面带一个可选参数，选项与参数之间不能有空格, 形式应该如-b200
         int c = getopt_long(argc, argv,
-                            "d:ln:rs",
+                            "ad:ln:rs",
                             long_options, &oi);
 
         //每次执行会打印多次, 最后一次也是-1
@@ -1090,6 +1090,12 @@ static int decode_switches(int argc, char **argv)
         }
         switch (c)
         {
+            case 'a':
+            {
+                depth_max_num = INT_MAX;
+                list_max_num = INT_MAX;
+                break;
+            }
         case BACKUP_OPTION:
         {
             if (target_directory)
@@ -1266,6 +1272,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
 "),
               stdout);
         fputs(_("\
+    -a                          set -d INT_MAX -n INT_MAX together\n\
         --backup-to=TARGET      backup deleted expire files to TARGET directory\n\
                                 must be used with --expire-day | --expire-min and --remove together\n\
     -d, --depth=NUM             list subdirectories recursively depth\n\
@@ -1320,6 +1327,7 @@ void usage_zh(int status)
 "),
               stdout);
         fputs(_("\
+    -a                          同时设置-d 和 -n 为int最大值\n\
         --backup-to=TARGET      备份要删除的过期文件到目标目录\n\
                                 必须和 --expire-day | --expire-min 以及 --remove 一起使用时才有效\n\
     -d, --depth=NUM             显示子文件夹深度，默认为0\n\
