@@ -33,6 +33,7 @@ make install
 注：参数[FILE]不提供时默认操作当前目录.
 
 凡对长选项来说不可省略的参数,对于短选项也是不可省略的.
+    -a                          同时设置-d 和 -n 为int最大值\n\
         --backup-to=TARGET      备份要删除的过期文件到目标目录
                                 必须和 --expire-day | --expire-min 以及 --remove 一起使用时才有效
     -d, --depth=NUM             显示子文件夹深度，默认为0
@@ -64,7 +65,7 @@ vls --expire-min=2 --remove
 vls --expire-min=2 --remove --backup-to=/tmp/ /src/
 
 #查看文件夹大小
-vls -sr
+vls -asr
 
 #增加cpu, io休息时间
 vls --sleep=10000
