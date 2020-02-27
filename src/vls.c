@@ -669,7 +669,7 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
 
     char hbuf[LONGEST_HUMAN_READABLE + 1];
     char const *size = human_readable(st.st_size, hbuf);
-    if strlen(size) < 5 {
+    if (strlen(size) < 5) {
         int pad;
         for (pad = 5 - strlen(size); 0 < pad; pad--)
             *p++ = ' ';
@@ -680,8 +680,10 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     fputs(buf, stdout);
     putchar(' ');
 
-    format_user(st.st_uid, 10, true);
-    format_group(st.st_gid, 10, true);
+    format_user(st.st_uid, 6, true);
+    putchar(' ');
+    format_group(st.st_gid, 6, true);
+    putchar(' ');
     p = buf;
 
     when_local = localtime(&st.st_mtime);
@@ -855,18 +857,17 @@ format_user_or_group(char const *name, unsigned long int id, int width)
         if (strlen(name) > width)
         {
             char *tmp = substring(name, 0, width);
-            fputs(name, stdout);
+            fputs(tmp, stdout);
             free(tmp);
         }
         else
         {
             int width_gap = width - strlen(name);
             int pad = MAX(0, width_gap);
-            fputs(name, stdout);
-
-            do
+            while (pad--) {
                 putchar(' ');
-            while (pad--);
+            }
+            fputs(name, stdout);
         }
     }
     else
