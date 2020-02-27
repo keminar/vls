@@ -520,7 +520,7 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
     else
     {
         // todo 根据getcwd得到全路径检查是否为
-        if (strcmp(name, "kcore") == 0) {
+        if (strcmp(absolute_name, "/proc/kcore") == 0 || strcmp(name, "kcore") == 0) {
             st.st_size = 0;
         }
         //printf("file: %s \n", absolute_name);
