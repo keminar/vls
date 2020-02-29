@@ -83,6 +83,11 @@ Todo
 
 编程小提示
 ===
+gdb调试模式
+```
+    ./configure --enable-debug
+```
+
 修改版本修改configure.ac
 
 增加新代码文件
