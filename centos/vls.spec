@@ -1,5 +1,5 @@
 Name: vls
-Version: 0.2
+Version: 0.21
 Release: 1%{?dist}
 Summary: vls is a software
 Group: Applications/System

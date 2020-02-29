@@ -27,6 +27,23 @@
 #include "../lib/areadlink.h"
 #include "../lib/shquote.h"
 
+
+//自动模式
+#define FORMAT_A 0
+//回车模式
+#define FORMAT_R 1
+//换行模式
+#define FORMAT_N 2
+
+// 文件状态
+#define FILE_STA_NONE 0
+#define FILE_STA_REMOVE 1
+#define FILE_STA_EXPIRE 2
+#define FILE_STA_NORMAL 3
+
+// 文件大小进制
+#define DU_UNIT 1024
+
 enum filetype
 {
     unknown,
@@ -62,7 +79,6 @@ static int now_time;
 static char *target_directory;
 
 /* True means to display author information.  */
-
 static bool print_author;
 
 //打印总大小
@@ -70,20 +86,6 @@ static bool print_size;
 
 // 是否可清掉当前行
 static bool can_clear_line;
-
-//自动模式
-#define FORMAT_A 0
-//回车模式
-#define FORMAT_R 1
-//换行模式
-#define FORMAT_N 2
-
-#define FILE_STA_NONE 0
-#define FILE_STA_REMOVE 1
-#define FILE_STA_EXPIRE 2
-#define FILE_STA_NORMAL 3
-
-#define DU_UNIT 1024
 
 //打印模式
 static int print_format;
@@ -98,6 +100,7 @@ static size_t tabsize;
 //打印的文件数
 static size_t print_nums;
 
+// 终端宽度
 unsigned short int termios_width;
 
 enum format
@@ -107,6 +110,8 @@ enum format
 };
 
 static enum format format;
+
+static char* cwd_path;
 
 // 解开命令行参数
 static int decode_switches(int argc, char **argv);
@@ -360,10 +365,15 @@ int main(int argc, char **argv)
     {
         if (signal(SIGWINCH, sig_winch) == SIG_ERR)
         {
-            perror("signal error");
-            return 1;
+            error(LS_FAILURE, errno, _("signal error"));
         }
         pr_winsize(STDIN_FILENO);
+    }
+
+    //当前目录
+    cwd_path = getcwd(NULL, 0);
+    if (cwd_path == NULL) {
+        error(LS_FAILURE, errno, _("getcwd error"));
     }
 
     //atexit(close_stdout);
@@ -389,13 +399,13 @@ int main(int argc, char **argv)
     {
         if (print_format == FORMAT_R)
         {
-            printf("\r\033[K");
+            ROLLBACK_DELETE
         }
         else if (print_format == FORMAT_A)
         {
             if (can_clear_line == true)
             {
-                printf("\r\033[K");
+                ROLLBACK_DELETE
             }
         }
 
@@ -405,13 +415,13 @@ int main(int argc, char **argv)
     }
     else if (print_format == FORMAT_R)
     {
-        printf("\r\033[K");
+        ROLLBACK_DELETE
     }
     else if (print_format == FORMAT_A)
     {
         if (can_clear_line == true)
         {
-            printf("\r\033[K");
+            ROLLBACK_DELETE
         }
     }
     exit(exit_status);
@@ -519,8 +529,9 @@ gobble_file(char const *name, enum filetype type, ino_t inode,
     }
     else
     {
-        // todo 根据getcwd得到全路径检查是否为
-        if (strcmp(absolute_name, "/proc/kcore") == 0 || strcmp(name, "kcore") == 0) {
+        // 根据getcwd得到全路径检查是否为
+        if (strcmp(absolute_name, "/proc/kcore") == 0 || 
+            (strcmp(cwd_path, "/proc") == 0 && strcmp(name, "kcore") == 0)) {
             st.st_size = 0;
         }
         //printf("file: %s \n", absolute_name);
@@ -651,22 +662,26 @@ char *substring(const char *ch, int pos, int length)
 // 打印多些数据
 static void print_long_format(const char *absolute_name, struct stat st, char const *backup_name)
 {
-    //todo 如果输出超过可见区域长度会提前换行，导致回车清除不干净
-    if (print_format == FORMAT_R)
-    {
-        printf("\r\033[K");
-    }
     char modebuf[12];
     struct tm *when_local;
-    char timeStr[80];
+    char timeStr[20];
     char *p;
     char buf[1024];
+    int attr_length;
+    int name_max_width;
+    int name_length;
+    
+    if (print_format == FORMAT_R)
+    {
+        ROLLBACK_DELETE
+    }
 
     p = buf;
     filemodestring(&st, modebuf);
     sprintf(p, "%s ", modebuf);
     p += strlen(p);
 
+    // 大小
     char hbuf[LONGEST_HUMAN_READABLE + 1];
     char const *size = human_readable(st.st_size, hbuf);
     if (strlen(size) < 5) {
@@ -679,55 +694,62 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
     *p = '\0';
     fputs(buf, stdout);
     putchar(' ');
+    // 重置到起点，才能计算总长度
+    p = buf;
+    attr_length = strlen(p) + 1;
 
+    //用户名，组
     format_user(st.st_uid, 6, true);
     putchar(' ');
     format_group(st.st_gid, 6, true);
     putchar(' ');
-    p = buf;
+    attr_length += 14;
 
+    // 时间
     when_local = localtime(&st.st_mtime);
     strftime(timeStr, sizeof(timeStr), "%F %T", when_local);
     fputs(timeStr, stdout);
     putchar(' ');
+    attr_length += strlen(timeStr) + 1;
 
-    //todo 临时代码
-    unsigned short int max_len;
-    if (termios_width > 60)
-    {
-        max_len = termios_width - 60;
-    }
-    else
-    {
-        max_len = 5;
-    }
+    // 给最后的换行符留一个位置
+    name_max_width = termios_width - attr_length - 1;
+
+    // strlen返回是size_t
+    // 将size_t(unsigned int)转为int 否则下面name_max_width为负数时也会被转成超大的无符号正值，导致对比不正确
+    name_length = strlen(absolute_name);
     // long模式没有FORMAT_A的情况
-    if (print_format == FORMAT_R && strlen(absolute_name) >= max_len)
+    if (print_format == FORMAT_R && name_length > name_max_width)
     {
-        char *tmp = substring(absolute_name, 0, max_len - 5);
+        if (name_max_width <=0) {
+            // 清掉已经输出的半行内容
+            ROLLBACK_DELETE
+            error(LS_FAILURE, 0, _("termios cols must bigger than %d"), attr_length + 1);
+        }
+        char *tmp = substring(absolute_name, 0, name_max_width);
         quote_name(stdout, tmp);
         free(tmp);
     }
     else
     {
         quote_name(stdout, absolute_name);
-    }
-
-    if (S_ISLNK(st.st_mode))
-    {
-        char *linkname = get_link_name(absolute_name, st.st_size);
-        if (linkname != NULL)
+        if (S_ISLNK(st.st_mode))
         {
-            fputs(" -> ", stdout);
-            fputs(linkname, stdout);
-            free(linkname);
+            char *linkname = get_link_name(absolute_name, st.st_size);
+            if (linkname != NULL)
+            {
+                fputs(" -> ", stdout);
+                fputs(linkname, stdout);
+                free(linkname);
+            }
         }
     }
-    else if (S_ISDIR(st.st_mode))
+
+    if (S_ISDIR(st.st_mode))
     {
         putchar('/');
     }
-    if (print_format == FORMAT_N)
+    if (print_format != FORMAT_R)
     {
         putchar('\n');
     }
@@ -737,6 +759,12 @@ static void print_long_format(const char *absolute_name, struct stat st, char co
 static void print_one_per_line(const char *absolute_name, struct stat st, char const *backup_name)
 {
     int fs;
+    char *p;
+    char buf[10];
+    int name_max_width;
+    int name_length;
+
+    p  = buf;
     fs = judge_dir_file(absolute_name, st, backup_name);
     switch (fs)
     {
@@ -746,15 +774,15 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         {
             if (can_clear_line)
             {
-                printf("\r\033[K");
+                ROLLBACK_DELETE
             }
             can_clear_line = false;
         }
         else if (print_format == FORMAT_R)
         {
-            printf("\r\033[K");
+            ROLLBACK_DELETE
         }
-        fputs("expire ", stdout);
+        strcpy(p, "expire ");
         break;
     }
     case FILE_STA_NORMAL:
@@ -763,15 +791,15 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         {
             if (can_clear_line)
             {
-                printf("\r\033[K");
+                ROLLBACK_DELETE
             }
             can_clear_line = true;
         }
         else if (print_format == FORMAT_R)
         {
-            printf("\r\033[K");
+            ROLLBACK_DELETE
         }
-        fputs("normal ", stdout);
+        strcpy(p, "normal ");
         break;
     }
     case FILE_STA_REMOVE:
@@ -780,30 +808,45 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         {
             if (can_clear_line)
             {
-                printf("\r\033[K");
+                ROLLBACK_DELETE
             }
             can_clear_line = false;
         }
         else if (print_format == FORMAT_R)
         {
-            printf("\r\033[K");
+            ROLLBACK_DELETE
         }
-        fputs("remove ", stdout);
+        strcpy(p, "remove ");
         break;
     }
     default:
     {
         if (print_format == FORMAT_R)
         {
-            printf("\r\033[K");
+            ROLLBACK_DELETE
         }
         break;
     }
     }
-    //todo 临时代码
-    if ((print_format == FORMAT_R || can_clear_line == true) && strlen(absolute_name) >= termios_width)
+
+    if (strlen(p) > 0) {
+        // 给最后的换行符留一个位置
+        name_max_width = termios_width - strlen(p) - 1;
+    } else {
+        // 给最后的换行符留一个位置
+        name_max_width = termios_width - 1;
+    }
+
+    // strlen返回是size_t
+    // 将size_t(unsigned int)转为int 否则下面name_max_width为负数时也会被转成超大的无符号正值，导致对比不正确
+    name_length = strlen(absolute_name);
+    // 截取长度
+    if ((print_format == FORMAT_R || can_clear_line == true) && name_length > name_max_width)
     {
-        char *tmp = substring(absolute_name, 0, termios_width - 5);
+        if (name_max_width <=0) {
+            error(LS_FAILURE, 0, _("termios cols must bigger than %d"), strlen(p) + 1);
+        }
+        char *tmp = substring(absolute_name, 0, name_max_width);
         quote_name(stdout, tmp);
         free(tmp);
     }
@@ -878,7 +921,6 @@ format_user_or_group(char const *name, unsigned long int id, int width)
 
 /* Print the name or id of the user with id U, using a print width of
    WIDTH.  */
-
 static void
 format_user(uid_t u, int width, bool stat_ok)
 {
