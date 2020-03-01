@@ -844,7 +844,7 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
     if ((print_format == FORMAT_R || can_clear_line == true) && name_length > name_max_width)
     {
         if (name_max_width <=0) {
-            error(LS_FAILURE, 0, _("termios cols must bigger than %d"), strlen(p) + 1);
+            error(LS_FAILURE, 0, _("termios cols must bigger than %zu"), strlen(p) + 1);
         }
         char *tmp = substring(absolute_name, 0, name_max_width);
         quote_name(stdout, tmp);
