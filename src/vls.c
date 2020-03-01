@@ -828,6 +828,7 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
         break;
     }
     }
+    fputs(buf, stdout);
 
     if (strlen(p) > 0) {
         // 给最后的换行符留一个位置
