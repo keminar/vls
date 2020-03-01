@@ -94,5 +94,7 @@ gdb调试模式
 
     * 修改对应目录的Makefile.am和src目录的Makefile.am
     * 运行 aclocal  autoconf autoheader automake 生成相关文件
+    * git当前的configure Makefile是在centos7上生成的
+    * rpm 包是在centos6上打包的
 
 很多文件是autoscan automake生成的，可以百度相关教程 如：https://www.jianshu.com/p/17e777868d6b   
