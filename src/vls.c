@@ -765,6 +765,7 @@ static void print_one_per_line(const char *absolute_name, struct stat st, char c
     int name_length;
 
     p  = buf;
+    *p = '\0';
     fs = judge_dir_file(absolute_name, st, backup_name);
     switch (fs)
     {
